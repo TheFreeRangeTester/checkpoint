@@ -6,8 +6,37 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F14A10032F90000100C0FFEE /* CheckPointWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F14A10012F90000100C0FFEE /* CheckPointWidget.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F14A10042F90000100C0FFEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E6F5412E2F8616BF00450AC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F14A100A2F90000100C0FFEE;
+			remoteInfo = CheckPointWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F14A10062F90000100C0FFEE /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F14A10032F90000100C0FFEE /* CheckPointWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		E6F541362F8616BF00450AC5 /* CheckPoint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CheckPoint.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F14A10012F90000100C0FFEE /* CheckPointWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CheckPointWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +45,22 @@
 			path = CheckPoint;
 			sourceTree = "<group>";
 		};
+		F14A10022F90000100C0FFEE /* CheckPointWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CheckPointWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		E6F541332F8616BF00450AC5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F14A10052F90000100C0FFEE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				E6F541382F8616BF00450AC5 /* CheckPoint */,
+				F14A10022F90000100C0FFEE /* CheckPointWidget */,
 				E6F541372F8616BF00450AC5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				E6F541362F8616BF00450AC5 /* CheckPoint.app */,
+				F14A10012F90000100C0FFEE /* CheckPointWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,10 +98,12 @@
 				E6F541322F8616BF00450AC5 /* Sources */,
 				E6F541332F8616BF00450AC5 /* Frameworks */,
 				E6F541342F8616BF00450AC5 /* Resources */,
+				F14A10062F90000100C0FFEE /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F14A10072F90000100C0FFEE /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E6F541382F8616BF00450AC5 /* CheckPoint */,
@@ -69,6 +114,28 @@
 			productName = CheckPoint;
 			productReference = E6F541362F8616BF00450AC5 /* CheckPoint.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F14A100A2F90000100C0FFEE /* CheckPointWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F14A100D2F90000100C0FFEE /* Build configuration list for PBXNativeTarget "CheckPointWidget" */;
+			buildPhases = (
+				F14A10082F90000100C0FFEE /* Sources */,
+				F14A10052F90000100C0FFEE /* Frameworks */,
+				F14A10092F90000100C0FFEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F14A10022F90000100C0FFEE /* CheckPointWidget */,
+			);
+			name = CheckPointWidget;
+			packageProductDependencies = (
+			);
+			productName = CheckPointWidget;
+			productReference = F14A10012F90000100C0FFEE /* CheckPointWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +148,9 @@
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					E6F541352F8616BF00450AC5 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					F14A100A2F90000100C0FFEE = {
 						CreatedOnToolsVersion = 26.4;
 					};
 				};
@@ -100,12 +170,20 @@
 			projectRoot = "";
 			targets = (
 				E6F541352F8616BF00450AC5 /* CheckPoint */,
+				F14A100A2F90000100C0FFEE /* CheckPointWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		E6F541342F8616BF00450AC5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F14A10092F90000100C0FFEE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +200,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F14A10082F90000100C0FFEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F14A10072F90000100C0FFEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F14A100A2F90000100C0FFEE /* CheckPointWidget */;
+			targetProxy = F14A10042F90000100C0FFEE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		E6F541412F8616C000450AC5 /* Debug */ = {
@@ -251,11 +344,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CheckPoint/CheckPoint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RV2T2C8KMF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = Capybarista.CheckPoint;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = checkpoint;
 				INFOPLIST_KEY_RAWG_API_KEY = be9c6d8902014726b0efa64c108308e4;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -284,11 +380,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CheckPoint/CheckPoint.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = RV2T2C8KMF;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLName = Capybarista.CheckPoint;
+				INFOPLIST_KEY_CFBundleURLTypes_0_CFBundleURLSchemes_0 = checkpoint;
 				INFOPLIST_KEY_RAWG_API_KEY = be9c6d8902014726b0efa64c108308e4;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -302,6 +401,70 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = Capybarista.CheckPoint;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+			F14A100B2F90000100C0FFEE /* Debug */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					APPLICATION_EXTENSION_API_ONLY = YES;
+					CODE_SIGN_ENTITLEMENTS = CheckPointWidget/CheckPointWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+					CURRENT_PROJECT_VERSION = 1;
+					DEVELOPMENT_TEAM = RV2T2C8KMF;
+					ENABLE_PREVIEWS = YES;
+					GENERATE_INFOPLIST_FILE = NO;
+					INFOPLIST_FILE = CheckPointWidget-Info.plist;
+					IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Capybarista.CheckPoint.CheckPointWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+			F14A100C2F90000100C0FFEE /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					APPLICATION_EXTENSION_API_ONLY = YES;
+					CODE_SIGN_ENTITLEMENTS = CheckPointWidget/CheckPointWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+					CURRENT_PROJECT_VERSION = 1;
+					DEVELOPMENT_TEAM = RV2T2C8KMF;
+					ENABLE_PREVIEWS = YES;
+					GENERATE_INFOPLIST_FILE = NO;
+					INFOPLIST_FILE = CheckPointWidget-Info.plist;
+					IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+					LD_RUNPATH_SEARCH_PATHS = (
+						"$(inherited)",
+						"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Capybarista.CheckPoint.CheckPointWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -329,6 +492,15 @@
 			buildConfigurations = (
 				E6F541442F8616C000450AC5 /* Debug */,
 				E6F541452F8616C000450AC5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F14A100D2F90000100C0FFEE /* Build configuration list for PBXNativeTarget "CheckPointWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F14A100B2F90000100C0FFEE /* Debug */,
+				F14A100C2F90000100C0FFEE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
