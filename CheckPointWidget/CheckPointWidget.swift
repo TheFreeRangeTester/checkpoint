@@ -87,39 +87,31 @@ private struct CheckPointResumeWidgetView: View {
     private var smallBody: some View {
         Group {
             if let featuredGame = entry.snapshot.featuredGame {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "gamecontroller.fill")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(Color.white.opacity(0.78))
-                            .padding(8)
-                            .background(
-                                Circle()
-                                    .fill(Color.black.opacity(0.26))
-                            )
-                    }
-
+                VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    Text(featuredGame.title)
-                        .font(.title3.weight(.black))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.32), radius: 10, x: 0, y: 4)
+                    VStack(alignment: .center, spacing: 10) {
+                        Text(CheckpointActivityFormatter.lastActivityLabel(for: featuredGame.lastPlayedAt))
+                            .font(.title3.weight(.black))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.82)
+                            .multilineTextAlignment(.center)
+                            .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 4)
 
-                    statusPill(
-                        title: CheckpointResumeCopy.pendingTasksSummary(pendingCount: featuredGame.pendingTasksCount),
-                        systemImage: "checklist"
-                    )
+                        statusPill(
+                            title: featuredGame.pendingTasksCount == 1 ? "1 task pending" : "\(featuredGame.pendingTasksCount) tasks pending",
+                            systemImage: "checklist"
+                        )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 10)
 
-                    Text(CheckpointActivityFormatter.lastActivityLabel(for: featuredGame.lastPlayedAt))
-                        .font(.caption2)
-                        .foregroundStyle(Color.white.opacity(0.82))
-                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 18)
             } else {
                 emptyState
             }
@@ -222,6 +214,23 @@ private struct CheckPointResumeWidgetView: View {
         }
     }
 
+    private func smallMetricCapsule(title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.black.opacity(0.28))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(widgetAccent.opacity(0.42), lineWidth: 1)
+            }
+    }
+
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: "gamecontroller")
@@ -267,13 +276,13 @@ private struct CheckPointResumeWidgetView: View {
                     .clipped()
 
                 Rectangle()
-                    .fill(Color.black.opacity(family == .systemMedium ? 0.28 : 0.34))
+                    .fill(Color.black.opacity(family == .systemMedium ? 0.28 : 0.20))
 
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(0.08),
-                        Color.black.opacity(family == .systemMedium ? 0.36 : 0.28),
-                        Color.black.opacity(0.72)
+                        Color.black.opacity(0.06),
+                        Color.black.opacity(family == .systemMedium ? 0.36 : 0.18),
+                        Color.black.opacity(family == .systemMedium ? 0.72 : 0.52)
                     ],
                     startPoint: .top,
                     endPoint: .bottom

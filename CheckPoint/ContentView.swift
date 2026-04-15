@@ -621,30 +621,30 @@ private struct GameDetailView: View {
                 }
             }
         }
-        .confirmationDialog("Delete this game?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+        .alert("Delete this game?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
                 deleteGame()
             }
-            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will remove the game, notes, and tasks from this device.")
         }
-        .confirmationDialog("Delete this note?", isPresented: isShowingDeleteNoteConfirmation, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                deletePendingNote()
-            }
+        .alert("Delete this note?", isPresented: isShowingDeleteNoteConfirmation) {
             Button("Cancel", role: .cancel) {
                 notePendingDeletion = nil
+            }
+            Button("Delete", role: .destructive) {
+                deletePendingNote()
             }
         } message: {
             Text("This note will be removed from this game.")
         }
-        .confirmationDialog("Delete this link?", isPresented: isShowingDeleteResourceConfirmation, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                deletePendingResource()
-            }
+        .alert("Delete this link?", isPresented: isShowingDeleteResourceConfirmation) {
             Button("Cancel", role: .cancel) {
                 resourcePendingDeletion = nil
+            }
+            Button("Delete", role: .destructive) {
+                deletePendingResource()
             }
         } message: {
             Text("This link will be removed from this game.")
@@ -681,9 +681,9 @@ private struct GameDetailView: View {
                 Spacer()
 
                 Button { activeSheet = .quickTask } label: { Text("+ Task") }
-                .buttonStyle(.borderedProminent)
-                .tint(QuietConsoleTheme.secondaryAction)
-                .controlSize(compactQuickResumeLayout ? .small : .regular)
+                    .buttonStyle(.borderedProminent)
+                    .tint(QuietConsoleTheme.accent)
+                    .controlSize(compactQuickResumeLayout ? .small : .regular)
 
                 Button { activeSheet = .quickNote } label: { Text("+ Note") }
                     .buttonStyle(.borderedProminent)
@@ -692,7 +692,7 @@ private struct GameDetailView: View {
 
                 Button { beginAddingResource() } label: { Text("+ Link") }
                     .buttonStyle(.borderedProminent)
-                    .tint(QuietConsoleTheme.secondaryAction)
+                    .tint(QuietConsoleTheme.accent)
                     .controlSize(compactQuickResumeLayout ? .small : .regular)
             }
 
@@ -944,7 +944,7 @@ private struct GameDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 8) {
+                List {
                     ForEach(sortedNotes) { note in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(alignment: .top, spacing: 12) {
@@ -961,9 +961,6 @@ private struct GameDetailView: View {
                                     Button("Edit Note") {
                                         beginEditing(note)
                                     }
-                                    Button("Delete Note", role: .destructive) {
-                                        notePendingDeletion = note
-                                    }
                                 } label: {
                                     Image(systemName: "ellipsis.circle")
                                         .font(.system(size: 15, weight: .semibold))
@@ -975,9 +972,24 @@ private struct GameDetailView: View {
                         }
                         .padding(.vertical, 12)
                         .padding(.horizontal, 12)
-                        .quietSurface(.secondary, cornerRadius: 12)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("Delete", role: .destructive) {
+                                notePendingDeletion = note
+                            }
+                            .tint(.red)
+                        }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(QuietConsoleTheme.secondaryFill)
+                        )
+                        .listRowSeparator(.hidden)
                     }
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .frame(height: notesListHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1291,6 +1303,11 @@ private struct GameDetailView: View {
             if lhs.isDone != rhs.isDone { return lhs.isDone == false }
             return lhs.createdAt < rhs.createdAt
         }
+    }
+
+    private var notesListHeight: CGFloat {
+        let rowHeight: CGFloat = 64
+        return CGFloat(sortedNotes.count) * rowHeight
     }
 
     private var tasksListHeight: CGFloat {
