@@ -13,6 +13,7 @@ struct ContentView: View {
 
 private struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
     @Query private var games: [Game]
     @State private var showingAddGame = false
     @State private var showingBackupImporter = false
@@ -200,6 +201,21 @@ private struct LibraryView: View {
 
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                Section("Help Improve CheckPoint") {
+                    Button {
+                        sendFeedback(kind: .general)
+                    } label: {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
+
+                    Button {
+                        sendFeedback(kind: .feature)
+                    } label: {
+                        Label("Request a Feature", systemImage: "lightbulb")
+                    }
+                }
+
+                Section("Backup") {
                 Button {
                     showingBackupCenter = true
                 } label: {
@@ -217,12 +233,18 @@ private struct LibraryView: View {
                 } label: {
                     Label("Import Backup", systemImage: "square.and.arrow.down")
                 }
+                }
             } label: {
-                Image(systemName: "externaldrive.badge.icloud")
+                Image(systemName: "ellipsis.circle")
                     .font(.body.weight(.semibold))
             }
-            .accessibilityLabel("Backup options")
+            .accessibilityLabel("App options")
         }
+    }
+
+    private func sendFeedback(kind: FeedbackKind) {
+        guard let url = kind.mailURL else { return }
+        openURL(url)
     }
 
     private func deleteGames(at offsets: IndexSet) {
@@ -468,6 +490,65 @@ private struct LibraryView: View {
 
         navigationPath = [pendingDeepLinkGameID]
         self.pendingDeepLinkGameID = nil
+    }
+}
+
+private enum FeedbackKind {
+    case general
+    case feature
+
+    private static let emailAddress = "checkpoint.support@gmail.com"
+
+    var subject: String {
+        switch self {
+        case .general:
+            return "CheckPoint Feedback"
+        case .feature:
+            return "CheckPoint Feature Request"
+        }
+    }
+
+    var body: String {
+        switch self {
+        case .general:
+            return """
+            Hi,
+
+            I'd like to share some feedback about CheckPoint:
+
+
+
+            App version:
+            iOS version:
+            Device:
+            """
+        case .feature:
+            return """
+            Hi,
+
+            I'd love to see this in CheckPoint:
+
+
+
+            Why it would help:
+
+
+            App version:
+            iOS version:
+            Device:
+            """
+        }
+    }
+
+    var mailURL: URL? {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = Self.emailAddress
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: subject),
+            URLQueryItem(name: "body", value: body)
+        ]
+        return components.url
     }
 }
 
