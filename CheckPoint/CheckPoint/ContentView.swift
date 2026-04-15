@@ -520,8 +520,6 @@ private struct GameDetailView: View {
     @State private var editingNote: GameNote?
     @State private var editingNoteText = ""
     @State private var notePendingDeletion: GameNote?
-    @State private var taskPendingDeletion: GameTask?
-    @State private var revealedTaskID: UUID?
     @State private var editingResource: GameResource?
     @State private var resourcePendingDeletion: GameResource?
     @State private var resourceDraftTitle = ""
@@ -584,16 +582,6 @@ private struct GameDetailView: View {
             }
         } message: {
             Text("This note will be removed from this game.")
-        }
-        .confirmationDialog("Delete this task?", isPresented: isShowingDeleteTaskConfirmation, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                deletePendingTask()
-            }
-            Button("Cancel", role: .cancel) {
-                taskPendingDeletion = nil
-            }
-        } message: {
-            Text("This task will be removed from this game.")
         }
         .confirmationDialog("Delete this link?", isPresented: isShowingDeleteResourceConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -840,36 +828,42 @@ private struct GameDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 8) {
+                List {
                     ForEach(sortedTasks) { task in
-                        TaskSwipeRow(
-                            task: task,
-                            isDeleteRevealed: revealedTaskID == task.id,
-                            onRevealDelete: {
-                                withAnimation(.snappy(duration: 0.2)) {
-                                    revealedTaskID = task.id
-                                }
-                            },
-                            onHideDelete: {
-                                guard revealedTaskID == task.id else { return }
-                                withAnimation(.snappy(duration: 0.2)) {
-                                    revealedTaskID = nil
-                                }
-                            },
-                            onToggleDone: {
-                                withAnimation(.snappy(duration: 0.2)) {
-                                    task.isDone.toggle()
-                                }
-                                Haptics.tap()
-                                saveContext()
-                            },
-                            onDelete: {
-                                revealedTaskID = nil
-                                taskPendingDeletion = task
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) {
+                                task.isDone.toggle()
                             }
-                        )
+                            Haptics.tap()
+                            saveContext()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isDone ? .green : .secondary)
+                                Text(task.text)
+                                    .font(.body)
+                                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                                    .strikethrough(task.isDone)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("Delete", role: .destructive) {
+                                deleteTask(task)
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .frame(height: tasksListHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1130,6 +1124,11 @@ private struct GameDetailView: View {
         }
     }
 
+    private var tasksListHeight: CGFloat {
+        let rowHeight: CGFloat = 56
+        return CGFloat(sortedTasks.count) * rowHeight
+    }
+
     private var pendingTasks: [GameTask] {
         sortedTasks.filter { $0.isDone == false }
     }
@@ -1194,17 +1193,6 @@ private struct GameDetailView: View {
         )
     }
 
-    private var isShowingDeleteTaskConfirmation: Binding<Bool> {
-        Binding(
-            get: { taskPendingDeletion != nil },
-            set: { isPresented in
-                if isPresented == false {
-                    taskPendingDeletion = nil
-                }
-            }
-        )
-    }
-
     private func beginEditing(_ note: GameNote) {
         editingNoteText = note.text
         editingNote = note
@@ -1241,12 +1229,9 @@ private struct GameDetailView: View {
         showSavedMessage("Checkpoint deleted")
     }
 
-    private func deletePendingTask() {
-        guard let task = taskPendingDeletion else { return }
+    private func deleteTask(_ task: GameTask) {
         game.tasks.removeAll { $0.id == task.id }
         modelContext.delete(task)
-        taskPendingDeletion = nil
-        revealedTaskID = nil
         saveContext()
         showSavedMessage("Task deleted")
     }
@@ -1348,90 +1333,6 @@ private struct GameDetailView: View {
 
     private var compactQuickResumeLayout: Bool {
         horizontalSizeClass == .compact && !dynamicTypeSize.isAccessibilitySize
-    }
-}
-
-private struct TaskSwipeRow: View {
-    let task: GameTask
-    let isDeleteRevealed: Bool
-    let onRevealDelete: () -> Void
-    let onHideDelete: () -> Void
-    let onToggleDone: () -> Void
-    let onDelete: () -> Void
-
-    @GestureState private var dragTranslation: CGFloat = 0
-
-    private let deleteActionWidth: CGFloat = 88
-
-    private var baseOffset: CGFloat {
-        isDeleteRevealed ? -deleteActionWidth : 0
-    }
-
-    private var contentOffset: CGFloat {
-        let proposedOffset = baseOffset + dragTranslation
-        return min(0, max(-deleteActionWidth, proposedOffset))
-    }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
-                    .font(.footnote.weight(.semibold))
-                    .frame(width: deleteActionWidth)
-                    .frame(maxHeight: .infinity)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .frame(maxHeight: .infinity)
-            .background(Color.red)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .opacity(isDeleteRevealed || dragTranslation < 0 ? 1 : 0)
-
-            Button(action: onToggleDone) {
-                HStack(spacing: 12) {
-                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(task.isDone ? .green : .secondary)
-                    Text(task.text)
-                        .font(.body)
-                        .foregroundStyle(task.isDone ? .secondary : .primary)
-                        .strikethrough(task.isDone)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
-                .quietSurface(.secondary, cornerRadius: 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .offset(x: contentOffset)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 12, coordinateSpace: .local)
-                    .updating($dragTranslation) { value, state, _ in
-                        let translation = value.translation.width
-                        if translation < 0 || isDeleteRevealed {
-                            state = translation
-                        }
-                    }
-                    .onEnded { value in
-                        let translation = value.translation.width
-                        let predicted = value.predictedEndTranslation.width
-
-                        if isDeleteRevealed {
-                            if translation > 28 || predicted > 40 {
-                                onHideDelete()
-                            } else {
-                                onRevealDelete()
-                            }
-                        } else if translation < -28 || predicted < -40 {
-                            onRevealDelete()
-                        } else {
-                            onHideDelete()
-                        }
-                    }
-            )
-        }
-        .clipped()
     }
 }
 
