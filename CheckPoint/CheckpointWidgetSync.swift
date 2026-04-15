@@ -22,10 +22,24 @@ enum CheckpointWidgetSync {
     }
 
     private static func makeSnapshot(from games: [Game]) -> CheckpointWidgetSnapshot {
-        guard let game = prioritizedGame(from: games) else {
+        let prioritizedGames = games.sorted { lhs, rhs in
+            compare(lhs, rhs) == .orderedDescending
+        }
+
+        let recentGames = prioritizedGames.prefix(5).map(makeFeaturedGame(from:))
+
+        guard let featuredGame = recentGames.first else {
             return .empty
         }
 
+        return CheckpointWidgetSnapshot(
+            refreshedAt: .now,
+            featuredGame: featuredGame,
+            recentGames: recentGames
+        )
+    }
+
+    private static func makeFeaturedGame(from game: Game) -> FeaturedGame {
         let latestNoteRaw = game.notes
             .sorted { $0.createdAt > $1.createdAt }
             .first?
@@ -51,24 +65,15 @@ enum CheckpointWidgetSync {
 
         let pendingTasksCount = game.tasks.filter { !$0.isDone }.count
 
-        return CheckpointWidgetSnapshot(
-            refreshedAt: .now,
-            featuredGame: FeaturedGame(
-                id: game.id,
-                title: game.title,
-                lastPlayedAt: game.lastPlayedAt,
-                latestNote: latestNote,
-                nextTask: nextTask,
-                pendingTasksCount: pendingTasksCount,
-                coverImageData: optimizedWidgetImageData(from: game.coverImageData)
-            )
+        return FeaturedGame(
+            id: game.id,
+            title: game.title,
+            lastPlayedAt: game.lastPlayedAt,
+            latestNote: latestNote,
+            nextTask: nextTask,
+            pendingTasksCount: pendingTasksCount,
+            coverImageData: optimizedWidgetImageData(from: game.coverImageData)
         )
-    }
-
-    private static func prioritizedGame(from games: [Game]) -> Game? {
-        games.max { lhs, rhs in
-            compare(lhs, rhs) == .orderedAscending
-        }
     }
 
     private static func compare(_ lhs: Game, _ rhs: Game) -> ComparisonResult {

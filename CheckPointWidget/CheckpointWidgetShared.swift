@@ -16,8 +16,9 @@ enum CheckpointDeepLink {
 struct CheckpointWidgetSnapshot: Codable, Sendable {
     let refreshedAt: Date
     let featuredGame: FeaturedGame?
+    let recentGames: [FeaturedGame]
 
-    static let empty = CheckpointWidgetSnapshot(refreshedAt: .now, featuredGame: nil)
+    static let empty = CheckpointWidgetSnapshot(refreshedAt: .now, featuredGame: nil, recentGames: [])
 }
 
 struct FeaturedGame: Codable, Sendable {

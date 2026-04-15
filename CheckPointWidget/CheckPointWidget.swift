@@ -35,7 +35,45 @@ struct CheckPointResumeProvider: TimelineProvider {
                 nextTask: "Buy more arrows and upgrade the bow",
                 pendingTasksCount: 2,
                 coverImageData: nil
-            )
+            ),
+            recentGames: [
+                FeaturedGame(
+                    id: UUID(),
+                    title: "Elden Ring",
+                    lastPlayedAt: Calendar.current.date(byAdding: .day, value: -1, to: .now),
+                    latestNote: "Need to clear the catacombs before heading back to the capital.",
+                    nextTask: "Buy more arrows and upgrade the bow",
+                    pendingTasksCount: 2,
+                    coverImageData: nil
+                ),
+                FeaturedGame(
+                    id: UUID(),
+                    title: "Red Dead Redemption 2",
+                    lastPlayedAt: Calendar.current.date(byAdding: .day, value: -3, to: .now),
+                    latestNote: "Continue chapter 3",
+                    nextTask: "Hunt the legendary buck",
+                    pendingTasksCount: 3,
+                    coverImageData: nil
+                ),
+                FeaturedGame(
+                    id: UUID(),
+                    title: "Tears of the Kingdom",
+                    lastPlayedAt: Calendar.current.date(byAdding: .day, value: -6, to: .now),
+                    latestNote: "Return to the underground map",
+                    nextTask: "Upgrade armor",
+                    pendingTasksCount: 1,
+                    coverImageData: nil
+                ),
+                FeaturedGame(
+                    id: UUID(),
+                    title: "Pokémon Silver",
+                    lastPlayedAt: Calendar.current.date(byAdding: .day, value: -9, to: .now),
+                    latestNote: "Need to train before the gym",
+                    nextTask: "Catch electric type",
+                    pendingTasksCount: 0,
+                    coverImageData: nil
+                )
+            ]
         )
     }
 }
@@ -49,7 +87,7 @@ struct CheckPointResumeWidget: Widget {
         }
         .configurationDisplayName("Resume Session")
         .description("Jump back into the game you were last focused on.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
 }
@@ -65,6 +103,8 @@ private struct CheckPointResumeWidgetView: View {
 
             Group {
                 switch family {
+                case .systemLarge:
+                    largeBody
                 case .systemMedium:
                     mediumBody
                 default:
@@ -188,6 +228,62 @@ private struct CheckPointResumeWidgetView: View {
         }
     }
 
+    private var largeBody: some View {
+        Group {
+            if entry.snapshot.recentGames.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("RECENTLY PLAYED")
+                            .font(.caption.weight(.black))
+                            .kerning(1)
+                            .foregroundStyle(widgetAccent.opacity(0.95))
+
+                        Spacer(minLength: 12)
+
+                        Text("\(entry.snapshot.recentGames.count) games")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.white.opacity(0.72))
+                    }
+
+                    Text("Pick up where you left off")
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(.white)
+                        .padding(.top, 4)
+                        .shadow(color: .black.opacity(0.24), radius: 8, x: 0, y: 4)
+
+                    VStack(spacing: 10) {
+                        ForEach(Array(entry.snapshot.recentGames.prefix(5).enumerated()), id: \.element.id) { index, game in
+                            largeRow(for: game, isFirst: index == 0)
+                        }
+                    }
+                    .padding(.top, 14)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(contentPanelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(widgetAccent.opacity(0.28), lineWidth: 1.5)
+                }
+                .overlay(alignment: .topLeading) {
+                    Capsule(style: .continuous)
+                        .fill(widgetAccent)
+                        .frame(width: 88, height: 6)
+                        .padding(.top, 2)
+                        .padding(.leading, 18)
+                }
+                .shadow(color: .black.opacity(0.26), radius: 22, x: 0, y: 12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+    }
+
     private func compactTasksBadge(pendingCount: Int) -> some View {
         HStack(spacing: 5) {
             Image(systemName: "checklist")
@@ -229,6 +325,46 @@ private struct CheckPointResumeWidgetView: View {
                 Capsule(style: .continuous)
                     .strokeBorder(widgetAccent.opacity(0.42), lineWidth: 1)
             }
+    }
+
+    private func largeRow(for game: FeaturedGame, isFirst: Bool) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            coverThumbnail(for: game, size: isFirst ? 46 : 38)
+
+            VStack(alignment: .leading, spacing: isFirst ? 5 : 3) {
+                Text(game.title)
+                    .font((isFirst ? Font.headline : .subheadline).weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text(CheckpointActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
+                    .font(isFirst ? .caption.weight(.semibold) : .caption2.weight(.semibold))
+                    .foregroundStyle(widgetAccent.opacity(0.9))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if game.pendingTasksCount > 0 {
+                compactTasksBadge(pendingCount: game.pendingTasksCount)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.white.opacity(0.65))
+            }
+        }
+        .padding(.horizontal, isFirst ? 12 : 10)
+        .padding(.vertical, isFirst ? 10 : 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: isFirst ? 18 : 16, style: .continuous)
+                .fill(Color.black.opacity(isFirst ? 0.26 : 0.18))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: isFirst ? 18 : 16, style: .continuous)
+                .strokeBorder(widgetAccent.opacity(isFirst ? 0.24 : 0.16), lineWidth: 1)
+        }
     }
 
     private var emptyState: some View {
