@@ -711,48 +711,134 @@ private struct GameDetailView: View {
 
     private var resumeSessionSheet: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Resume Session")
-                    .font(.title3.weight(.semibold))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 14) {
+                        resumeCoverImage
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Latest note")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(latestNoteText)
-                        .font(.body)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(game.title)
+                                .font(.title2.weight(.bold))
+                                .fontDesign(.rounded)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Up next")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                            Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(QuietConsoleTheme.activityText)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(QuietConsoleTheme.activityFill)
+                                )
 
-                    if pendingTasks.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("You're clear")
+                            Text(pendingTasksSummary)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            Text("Jump in now, or drop a quick note first.")
-                                .font(.footnote)
-                                .foregroundStyle(.tertiary)
-                        }
-                    } else {
-                        ForEach(pendingTasks.prefix(3)) { task in
-                            Label(task.text, systemImage: "circle")
-                                .font(.subheadline)
                         }
                     }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Latest note")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Text(latestNoteText)
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .quietSurface(.secondary, cornerRadius: 16)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Up next")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        if pendingTasks.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("You're clear")
+                                    .font(.headline)
+                                    .foregroundStyle(.secondary)
+                                Text("Jump in now, or drop a quick note first.")
+                                    .font(.body)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        } else {
+                            VStack(spacing: 10) {
+                                ForEach(pendingTasks.prefix(4)) { task in
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "circle")
+                                            .font(.body.weight(.semibold))
+                                            .foregroundStyle(QuietConsoleTheme.accent)
+                                        Text(task.text)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, 12)
+                                    .quietSurface(.primary, cornerRadius: 12)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .quietSurface(.secondary, cornerRadius: 16)
+
+                    if sortedResources.isEmpty == false {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Resources")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            VStack(spacing: 10) {
+                                ForEach(sortedResources.prefix(4)) { resource in
+                                    Button {
+                                        open(resource)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "link")
+                                                .font(.body.weight(.semibold))
+                                                .foregroundStyle(QuietConsoleTheme.accent)
+
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(resource.displayTitle)
+                                                    .font(.body.weight(.medium))
+                                                    .foregroundStyle(.primary)
+                                                    .lineLimit(1)
+
+                                                Text(resource.urlString)
+                                                    .font(.footnote)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
+
+                                            Spacer(minLength: 8)
+
+                                            Image(systemName: "arrow.up.right")
+                                                .font(.footnote.weight(.semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 12)
+                                        .quietSurface(.primary, cornerRadius: 12)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .quietSurface(.secondary, cornerRadius: 16)
+                    }
                 }
-
-                Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 0)
+                .padding(16)
             }
-            .padding(16)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -763,6 +849,32 @@ private struct GameDetailView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var resumeCoverImage: some View {
+        if let data = game.coverImageData,
+           let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 96, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(QuietConsoleTheme.cardBorder, lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(QuietConsoleTheme.secondaryFill)
+                .frame(width: 96, height: 96)
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundStyle(QuietConsoleTheme.subtleText)
+                }
+        }
     }
 
     private var notesSection: some View {
