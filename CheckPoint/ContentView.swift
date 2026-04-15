@@ -24,9 +24,11 @@ private struct LibraryView: View {
     @State private var backupAlertMessage: String?
     @State private var showingBackupAlert = false
     @State private var showingBackupCenter = false
+    @State private var navigationPath: [UUID] = []
+    @State private var pendingDeepLinkGameID: UUID?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if games.isEmpty {
                     ContentUnavailableView(
@@ -37,15 +39,7 @@ private struct LibraryView: View {
                 } else {
                     List {
                         ForEach(sortedGames) { game in
-                            NavigationLink {
-                                GameDetailView(game: game)
-                            } label: {
-                                GameCardView(game: game)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                            gameRow(for: game)
                         }
                         .onDelete(perform: deleteGames)
                     }
@@ -56,42 +50,7 @@ private struct LibraryView: View {
             }
             .navigationTitle("Checkpoint")
             .background(QuietConsoleTheme.canvas)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingAddGame = true
-                    } label: {
-                        Label("Add Game", systemImage: "plus")
-                    }
-                    .accessibilityHint("Adds a game to your library")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            showingBackupCenter = true
-                        } label: {
-                            Label("Backup & Restore", systemImage: "externaldrive.badge.icloud")
-                        }
-                        Button {
-                            prepareBackupExport()
-                        } label: {
-                            Label("Export Backup", systemImage: "square.and.arrow.up")
-                        }
-                        Button {
-                            showingBackupImporter = true
-                        } label: {
-                            Label("Import Backup", systemImage: "square.and.arrow.down")
-                        }
-                    } label: {
-                        Image(systemName: "externaldrive.badge.icloud")
-                            .font(.body.weight(.semibold))
-                    }
-                    .accessibilityLabel("Backup options")
-                }
-            }
+            .toolbar(content: toolbarContent)
             .sheet(isPresented: $showingAddGame) {
                 AddEditGameView(mode: .add)
             }
@@ -139,6 +98,28 @@ private struct LibraryView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(backupAlertMessage ?? "Done.")
+            }
+            .navigationDestination(for: UUID.self) { gameID in
+                if let game = games.first(where: { $0.id == gameID }) {
+                    GameDetailView(game: game)
+                } else {
+                    ContentUnavailableView(
+                        "Game Not Found",
+                        systemImage: "questionmark.circle",
+                        description: Text("That game is no longer available in your library.")
+                    )
+                }
+            }
+            .onAppear {
+                CheckpointWidgetSync.sync(games: games)
+                routePendingDeepLinkIfPossible()
+            }
+            .onChange(of: games.map(\.id)) { _, _ in
+                routePendingDeepLinkIfPossible()
+            }
+            .onOpenURL { url in
+                pendingDeepLinkGameID = CheckpointDeepLink.gameID(from: url)
+                routePendingDeepLinkIfPossible()
             }
         }
     }
@@ -191,10 +172,65 @@ private struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private func gameRow(for game: Game) -> some View {
+        NavigationLink(value: game.id) {
+            GameCardView(game: game)
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            EditButton()
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingAddGame = true
+            } label: {
+                Label("Add Game", systemImage: "plus")
+            }
+            .accessibilityHint("Adds a game to your library")
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button {
+                    showingBackupCenter = true
+                } label: {
+                    Label("Backup & Restore", systemImage: "externaldrive.badge.icloud")
+                }
+
+                Button {
+                    prepareBackupExport()
+                } label: {
+                    Label("Export Backup", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    showingBackupImporter = true
+                } label: {
+                    Label("Import Backup", systemImage: "square.and.arrow.down")
+                }
+            } label: {
+                Image(systemName: "externaldrive.badge.icloud")
+                    .font(.body.weight(.semibold))
+            }
+            .accessibilityLabel("Backup options")
+        }
+    }
+
     private func deleteGames(at offsets: IndexSet) {
         for index in offsets {
             modelContext.delete(sortedGames[index])
         }
+
+        saveLibraryChanges()
     }
 
     private var sortedGames: [Game] {
@@ -281,6 +317,7 @@ private struct LibraryView: View {
 
         do {
             try modelContext.save()
+            CheckpointWidgetSync.sync(using: modelContext)
             switch mode {
             case .merge:
                 showBackupAlert("Backup imported with merge.")
@@ -412,6 +449,25 @@ private struct LibraryView: View {
     private func showBackupAlert(_ message: String) {
         backupAlertMessage = message
         showingBackupAlert = true
+    }
+
+    private func saveLibraryChanges() {
+        do {
+            try modelContext.save()
+            CheckpointWidgetSync.sync(using: modelContext)
+        } catch {
+            assertionFailure("Failed saving library changes: \(error)")
+        }
+    }
+
+    private func routePendingDeepLinkIfPossible() {
+        guard let pendingDeepLinkGameID,
+              games.contains(where: { $0.id == pendingDeepLinkGameID }) else {
+            return
+        }
+
+        navigationPath = [pendingDeepLinkGameID]
+        self.pendingDeepLinkGameID = nil
     }
 }
 
@@ -1413,6 +1469,7 @@ private struct GameDetailView: View {
     private func saveContext() {
         do {
             try modelContext.save()
+            CheckpointWidgetSync.sync(using: modelContext)
         } catch {
             assertionFailure("Failed saving changes: \(error)")
         }
@@ -1422,6 +1479,7 @@ private struct GameDetailView: View {
         modelContext.delete(game)
         do {
             try modelContext.save()
+            CheckpointWidgetSync.sync(using: modelContext)
             dismiss()
         } catch {
             assertionFailure("Failed deleting game: \(error)")
@@ -1590,6 +1648,7 @@ private struct AddEditGameView: View {
 
         do {
             try modelContext.save()
+            CheckpointWidgetSync.sync(using: modelContext)
             dismiss()
         } catch {
             assertionFailure("Failed saving game: \(error)")
@@ -1737,30 +1796,17 @@ private extension View {
 }
 
 private enum QuickResumeCopy {
-    static let latestNotePrefix = "Latest note"
-    static let latestNoteFallback = "No checkpoints yet. Add one before you jump back in."
+    static let latestNotePrefix = CheckpointResumeCopy.latestNotePrefix
+    static let latestNoteFallback = CheckpointResumeCopy.latestNoteFallback
 
     static func pendingTasksSummary(pendingCount: Int) -> String {
-        if pendingCount == 0 { return "No pending tasks" }
-        if pendingCount == 1 { return "1 pending task" }
-        return "\(pendingCount) pending tasks"
+        CheckpointResumeCopy.pendingTasksSummary(pendingCount: pendingCount)
     }
 }
 
 private enum GameActivityFormatter {
     static func lastActivityLabel(for lastPlayedAt: Date?, now: Date = .now, calendar: Calendar = .current) -> String {
-        guard let lastPlayedAt else { return "No sessions yet" }
-        let start = calendar.startOfDay(for: lastPlayedAt)
-        let end = calendar.startOfDay(for: now)
-        let days = max(0, calendar.dateComponents([.day], from: start, to: end).day ?? 0)
-
-        if days == 0 { return "Played today" }
-        if days == 1 { return "Played yesterday" }
-        if days < 7 { return "Played \(days) days ago" }
-
-        let weeks = max(1, days / 7)
-        if weeks == 1 { return "Played 1 week ago" }
-        return "Played \(weeks) weeks ago"
+        CheckpointActivityFormatter.lastActivityLabel(for: lastPlayedAt, now: now, calendar: calendar)
     }
 }
 
