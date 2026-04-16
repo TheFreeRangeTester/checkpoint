@@ -239,12 +239,6 @@ private struct CheckPointResumeWidgetView: View {
                             .font(.caption.weight(.black))
                             .kerning(1)
                             .foregroundStyle(widgetAccent.opacity(0.95))
-
-                        Spacer(minLength: 12)
-
-                        Text("Recently played")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Color.white.opacity(0.72))
                     }
 
                     Text("Pick up where you left off")
