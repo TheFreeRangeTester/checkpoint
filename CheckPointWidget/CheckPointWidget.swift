@@ -242,7 +242,7 @@ private struct CheckPointResumeWidgetView: View {
 
                         Spacer(minLength: 12)
 
-                        Text("\(entry.snapshot.recentGames.count) games")
+                        Text("Recently played")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(Color.white.opacity(0.72))
                     }
@@ -253,12 +253,14 @@ private struct CheckPointResumeWidgetView: View {
                         .padding(.top, 4)
                         .shadow(color: .black.opacity(0.24), radius: 8, x: 0, y: 4)
 
-                    VStack(spacing: 10) {
-                        ForEach(Array(entry.snapshot.recentGames.prefix(5).enumerated()), id: \.element.id) { index, game in
+                    VStack(spacing: 8) {
+                        ForEach(Array(entry.snapshot.recentGames.prefix(4).enumerated()), id: \.element.id) { index, game in
                             largeRow(for: game, isFirst: index == 0)
                         }
                     }
                     .padding(.top, 14)
+
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
@@ -356,7 +358,7 @@ private struct CheckPointResumeWidgetView: View {
         }
         .padding(.horizontal, isFirst ? 12 : 10)
         .padding(.vertical, isFirst ? 10 : 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: isFirst ? 66 : 52, maxHeight: isFirst ? 66 : 52, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: isFirst ? 18 : 16, style: .continuous)
                 .fill(Color.black.opacity(isFirst ? 0.26 : 0.18))

@@ -26,7 +26,7 @@ enum CheckpointWidgetSync {
             compare(lhs, rhs) == .orderedDescending
         }
 
-        let recentGames = prioritizedGames.prefix(5).map(makeFeaturedGame(from:))
+        let recentGames = prioritizedGames.prefix(4).map(makeFeaturedGame(from:))
 
         guard let featuredGame = recentGames.first else {
             return .empty
