@@ -367,6 +367,7 @@ private struct LibraryView: View {
                 id: noteSnapshot.id,
                 createdAt: noteSnapshot.createdAt,
                 text: noteSnapshot.text,
+                photoData: noteSnapshot.photoData,
                 game: game
             )
             modelContext.insert(note)
@@ -412,11 +413,13 @@ private struct LibraryView: View {
             if let note = notesByID[noteSnapshot.id] {
                 note.createdAt = noteSnapshot.createdAt
                 note.text = noteSnapshot.text
+                note.photoData = noteSnapshot.photoData
             } else {
                 let note = GameNote(
                     id: noteSnapshot.id,
                     createdAt: noteSnapshot.createdAt,
                     text: noteSnapshot.text,
+                    photoData: noteSnapshot.photoData,
                     game: game
                 )
                 modelContext.insert(note)
@@ -622,12 +625,15 @@ private struct GameCardView: View {
     }
 
     private var latestNoteText: String? {
-        game.notes
-            .sorted { $0.createdAt > $1.createdAt }
-            .first?
-            .text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
+        guard let latestNote = game.notes.sorted(by: { $0.createdAt > $1.createdAt }).first else {
+            return nil
+        }
+
+        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return latestNote.photoData == nil ? nil : "Photo checkpoint"
+        }
+        return trimmed
     }
 }
 
@@ -636,9 +642,31 @@ private struct GameDetailView: View {
         case edit
         case quickNote
         case quickTask
-        case quickResource
         case resume
         var id: String { rawValue }
+    }
+
+    private enum ResourceEditor: Identifiable {
+        case add
+        case edit(GameResource)
+
+        var id: String {
+            switch self {
+            case .add:
+                return "add-resource"
+            case .edit(let resource):
+                return "edit-resource-\(resource.id.uuidString)"
+            }
+        }
+
+        var resource: GameResource? {
+            switch self {
+            case .add:
+                return nil
+            case .edit(let resource):
+                return resource
+            }
+        }
     }
 
     @Environment(\.modelContext) private var modelContext
@@ -651,13 +679,19 @@ private struct GameDetailView: View {
     @State private var activeSheet: ActiveSheet?
     @State private var showingDeleteConfirmation = false
     @State private var quickNoteText = ""
+    @State private var quickNotePhotoItem: PhotosPickerItem?
+    @State private var quickNoteImageData: Data?
     @State private var quickTaskText = ""
     @State private var savedMessage: String?
     @State private var savedMessageTask: Task<Void, Never>?
     @State private var editingNote: GameNote?
     @State private var editingNoteText = ""
+    @State private var editingNotePhotoItem: PhotosPickerItem?
+    @State private var editingNoteImageData: Data?
+    @State private var previewImageData: Data?
+    @State private var resumePreviewImageData: Data?
     @State private var notePendingDeletion: GameNote?
-    @State private var editingResource: GameResource?
+    @State private var activeResourceEditor: ResourceEditor?
     @State private var resourcePendingDeletion: GameResource?
     @State private var resourceDraftTitle = ""
     @State private var resourceDraftURL = ""
@@ -738,8 +772,6 @@ private struct GameDetailView: View {
                 quickNoteComposer
             case .quickTask:
                 quickTaskComposer
-            case .quickResource:
-                quickResourceComposer
             case .resume:
                 resumeSessionSheet
             }
@@ -747,8 +779,14 @@ private struct GameDetailView: View {
         .sheet(item: $editingNote) { _ in
             editNoteComposer
         }
-        .sheet(item: $editingResource) { _ in
-            quickResourceComposer
+        .sheet(item: $activeResourceEditor) { _ in
+            resourceComposer
+        }
+        .sheet(isPresented: isShowingImagePreview) {
+            noteImagePreviewSheet(
+                imageData: previewImageData,
+                dismissAction: { previewImageData = nil }
+            )
         }
     }
 
@@ -778,6 +816,7 @@ private struct GameDetailView: View {
             }
 
             Button {
+                markGameResumed()
                 activeSheet = .resume
             } label: {
                 Label(compactQuickResumeLayout ? "Resume" : "Resume Session", systemImage: "play.fill")
@@ -885,6 +924,21 @@ private struct GameDetailView: View {
                             .font(.title3.weight(.medium))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        if let latestNotePreviewImage {
+                            Button {
+                                resumePreviewImageData = latestNote?.photoData
+                            } label: {
+                                Image(uiImage: latestNotePreviewImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 156)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Open latest note photo")
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
@@ -895,7 +949,7 @@ private struct GameDetailView: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
 
-                        if pendingTasks.isEmpty {
+                        if sortedTasks.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("You're clear")
                                     .font(.headline)
@@ -906,19 +960,26 @@ private struct GameDetailView: View {
                             }
                         } else {
                             VStack(spacing: 10) {
-                                ForEach(pendingTasks.prefix(4)) { task in
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "circle")
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(QuietConsoleTheme.accent)
-                                        Text(task.text)
-                                            .font(.body.weight(.medium))
-                                            .foregroundStyle(.primary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                ForEach(sortedTasks.prefix(4)) { task in
+                                    Button {
+                                        toggleTask(task)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                                .font(.body.weight(.semibold))
+                                                .foregroundStyle(task.isDone ? .green : QuietConsoleTheme.accent)
+                                            Text(task.text)
+                                                .font(.body.weight(.medium))
+                                                .foregroundStyle(task.isDone ? .secondary : .primary)
+                                                .strikethrough(task.isDone)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 12)
+                                        .contentShape(Rectangle())
+                                        .quietSurface(.primary, cornerRadius: 12)
                                     }
-                                    .padding(.vertical, 12)
-                                    .padding(.horizontal, 12)
-                                    .quietSurface(.primary, cornerRadius: 12)
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -987,6 +1048,12 @@ private struct GameDetailView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: isShowingResumeImagePreview) {
+            noteImagePreviewSheet(
+                imageData: resumePreviewImageData,
+                dismissAction: { resumePreviewImageData = nil }
+            )
+        }
     }
 
     @ViewBuilder
@@ -1027,44 +1094,10 @@ private struct GameDetailView: View {
             } else {
                 List {
                     ForEach(sortedNotes) { note in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(alignment: .top, spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(note.text)
-                                        .font(.body)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Menu {
-                                    Button("Edit Note") {
-                                        beginEditing(note)
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(QuietConsoleTheme.subtleText)
-                                        .padding(.top, 2)
-                                }
-                                .accessibilityLabel("Note actions")
-                            }
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 12)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("Delete", role: .destructive) {
-                                notePendingDeletion = note
-                            }
-                            .tint(.red)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(QuietConsoleTheme.secondaryFill)
-                        )
-                        .listRowSeparator(.hidden)
+                        noteRow(note)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
                 }
                 .listStyle(.plain)
@@ -1076,6 +1109,66 @@ private struct GameDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .quietSurface(.primary, cornerRadius: 16)
+    }
+
+    private func noteRow(_ note: GameNote) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let displayText = noteDisplayText(for: note) {
+                        Text(displayText)
+                            .font(.body)
+                            .lineLimit(4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if let image = notePreviewImage(from: note.photoData) {
+                        Button {
+                            previewImageData = note.photoData
+                        } label: {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 148)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open note photo")
+                    }
+
+                    Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Menu {
+                    Button("Edit Note") {
+                        beginEditing(note)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(QuietConsoleTheme.subtleText)
+                        .padding(.top, 2)
+                }
+                .accessibilityLabel("Note actions")
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(QuietConsoleTheme.secondaryFill)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button("Delete", role: .destructive) {
+                notePendingDeletion = note
+            }
+            .tint(.red)
+        }
     }
 
     private var tasksSection: some View {
@@ -1092,11 +1185,7 @@ private struct GameDetailView: View {
                 List {
                     ForEach(sortedTasks) { task in
                         Button {
-                            withAnimation(.snappy(duration: 0.2)) {
-                                task.isDone.toggle()
-                            }
-                            Haptics.tap()
-                            saveContext()
+                            toggleTask(task)
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
@@ -1159,69 +1248,7 @@ private struct GameDetailView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(sortedResources) { resource in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .top, spacing: 10) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(resource.displayTitle)
-                                        .font(.body.weight(.medium))
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-
-                                    Text(resource.urlString)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                HStack(spacing: 8) {
-                                    Button {
-                                        open(resource)
-                                    } label: {
-                                        Image(systemName: "arrow.up.right.square")
-                                            .font(.system(size: 15, weight: .semibold))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(QuietConsoleTheme.accent)
-                                    .accessibilityLabel("Open link")
-
-                                    Menu {
-                                        Button("Edit Link") {
-                                            beginEditing(resource)
-                                        }
-                                        Button("Delete Link", role: .destructive) {
-                                            resourcePendingDeletion = resource
-                                        }
-                                    } label: {
-                                        Image(systemName: "ellipsis.circle")
-                                            .font(.system(size: 15, weight: .semibold))
-                                            .foregroundStyle(QuietConsoleTheme.subtleText)
-                                    }
-                                }
-                            }
-
-                            HStack(spacing: 8) {
-                                Text(resource.kindLabel)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(resource.kindTint)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(
-                                        Capsule(style: .continuous)
-                                            .fill(resource.kindTint.opacity(0.14))
-                                    )
-
-                                Spacer(minLength: 0)
-
-                                Text(resource.lastUsedLabel)
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 12)
-                        .quietSurface(.secondary, cornerRadius: 12)
+                        resourceRow(resource)
                     }
                 }
             }
@@ -1229,6 +1256,74 @@ private struct GameDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .quietSurface(.primary, cornerRadius: 16)
+    }
+
+    private func resourceRow(_ resource: GameResource) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(resource.displayTitle)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(resource.urlString)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(resource.kindLabel)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(resource.kindTint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(resource.kindTint.opacity(0.14))
+                    )
+            }
+
+            Text(resource.lastUsedLabel)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            HStack(spacing: 8) {
+                Button {
+                    open(resource)
+                } label: {
+                    Label("Open", systemImage: "arrow.up.right")
+                }
+                .tint(QuietConsoleTheme.accent)
+
+                Button {
+                    beginEditing(resource)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .tint(QuietConsoleTheme.accent)
+
+                Spacer(minLength: 0)
+
+                Button(role: .destructive) {
+                    resourcePendingDeletion = resource
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(QuietConsoleTheme.secondaryFill)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var quickNoteComposer: some View {
@@ -1240,10 +1335,21 @@ private struct GameDetailView: View {
                     .focused($isQuickNoteFieldFocused)
                     .onSubmit { quickSaveNote() }
 
+                PhotosPicker(selection: $quickNotePhotoItem, matching: .images) {
+                    Label(quickNoteImageData == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                }
+
+                if let previewImage = notePreviewImage(from: quickNoteImageData) {
+                    noteComposerImagePreview(
+                        image: previewImage,
+                        removeAction: { quickNoteImageData = nil }
+                    )
+                }
+
                 Button("Save Checkpoint") { quickSaveNote() }
                     .buttonStyle(.borderedProminent)
                     .tint(QuietConsoleTheme.accent)
-                    .disabled(quickNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(canSaveQuickNote == false)
             }
             .padding(16)
             .navigationTitle("Quick Checkpoint")
@@ -1251,14 +1357,23 @@ private struct GameDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        quickNoteText = ""
+                        clearQuickNoteDraft()
                         activeSheet = nil
+                    }
+                }
+            }
+            .onChange(of: quickNotePhotoItem) { _, newItem in
+                Task {
+                    let loadedData = try? await newItem?.loadTransferable(type: Data.self)
+                    let optimizedData = optimizedNoteImageData(from: loadedData)
+                    await MainActor.run {
+                        quickNoteImageData = optimizedData
                     }
                 }
             }
             .onAppear { isQuickNoteFieldFocused = true }
         }
-        .presentationDetents([.height(190)])
+        .presentationDetents([.medium])
     }
 
     private var quickTaskComposer: some View {
@@ -1303,12 +1418,23 @@ private struct GameDetailView: View {
                     )
                     .focused($isEditNoteFieldFocused)
 
+                PhotosPicker(selection: $editingNotePhotoItem, matching: .images) {
+                    Label(editingNoteImageData == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                }
+
+                if let previewImage = notePreviewImage(from: editingNoteImageData) {
+                    noteComposerImagePreview(
+                        image: previewImage,
+                        removeAction: { editingNoteImageData = nil }
+                    )
+                }
+
                 Button("Save Changes") {
                     saveEditedNote()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(QuietConsoleTheme.accent)
-                .disabled(editingNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(canSaveEditedNote == false)
             }
             .padding(16)
             .navigationTitle("Edit Note")
@@ -1320,12 +1446,65 @@ private struct GameDetailView: View {
                     }
                 }
             }
+            .onChange(of: editingNotePhotoItem) { _, newItem in
+                Task {
+                    let loadedData = try? await newItem?.loadTransferable(type: Data.self)
+                    let optimizedData = optimizedNoteImageData(from: loadedData)
+                    await MainActor.run {
+                        editingNoteImageData = optimizedData
+                    }
+                }
+            }
             .onAppear { isEditNoteFieldFocused = true }
         }
         .presentationDetents([.medium])
     }
 
-    private var quickResourceComposer: some View {
+    @ViewBuilder
+    private func noteComposerImagePreview(image: UIImage, removeAction: @escaping () -> Void) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(height: 180)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Button("Remove", role: .destructive) {
+                removeAction()
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.borderedProminent)
+            .tint(.black.opacity(0.72))
+            .padding(10)
+        }
+    }
+
+    private func noteImagePreviewSheet(imageData: Data?, dismissAction: @escaping () -> Void) -> some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if let previewImage = notePreviewImage(from: imageData) {
+                    Image(uiImage: previewImage)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(16)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismissAction()
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+    }
+
+    private var resourceComposer: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Optional title", text: $resourceDraftTitle)
@@ -1339,7 +1518,7 @@ private struct GameDetailView: View {
                     .focused($isResourceURLFieldFocused)
                     .onSubmit { saveResourceDraft() }
 
-                Button(editingResource == nil ? "Save Link" : "Save Changes") {
+                Button(resourceBeingEdited == nil ? "Save Link" : "Save Changes") {
                     saveResourceDraft()
                 }
                 .buttonStyle(.borderedProminent)
@@ -1347,14 +1526,13 @@ private struct GameDetailView: View {
                 .disabled(normalizedResourceURL(resourceDraftURL) == nil)
             }
             .padding(16)
-            .navigationTitle(editingResource == nil ? "Quick Link" : "Edit Link")
+            .navigationTitle(resourceBeingEdited == nil ? "Quick Link" : "Edit Link")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         clearResourceDraft()
-                        activeSheet = nil
-                        editingResource = nil
+                        activeResourceEditor = nil
                     }
                 }
             }
@@ -1365,6 +1543,20 @@ private struct GameDetailView: View {
 
     private var sortedNotes: [GameNote] {
         game.notes.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var latestNote: GameNote? {
+        sortedNotes.first
+    }
+
+    private var latestNotePreviewImage: UIImage? {
+        notePreviewImage(from: latestNote?.photoData)
+    }
+
+    private var notesListHeight: CGFloat {
+        sortedNotes.reduce(0) { partial, note in
+            partial + noteRowHeight(for: note)
+        }
     }
 
     private var sortedResources: [GameResource] {
@@ -1379,16 +1571,15 @@ private struct GameDetailView: View {
         }
     }
 
+    private var resourceBeingEdited: GameResource? {
+        activeResourceEditor?.resource
+    }
+
     private var sortedTasks: [GameTask] {
         game.tasks.sorted { lhs, rhs in
             if lhs.isDone != rhs.isDone { return lhs.isDone == false }
             return lhs.createdAt < rhs.createdAt
         }
-    }
-
-    private var notesListHeight: CGFloat {
-        let rowHeight: CGFloat = 64
-        return CGFloat(sortedNotes.count) * rowHeight
     }
 
     private var tasksListHeight: CGFloat {
@@ -1401,22 +1592,72 @@ private struct GameDetailView: View {
     }
 
     private var latestNoteText: String {
-        sortedNotes.first?.text ?? QuickResumeCopy.latestNoteFallback
+        guard let latestNote = sortedNotes.first else {
+            return QuickResumeCopy.latestNoteFallback
+        }
+
+        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return latestNote.photoData == nil ? QuickResumeCopy.latestNoteFallback : "Photo checkpoint"
+        }
+        return trimmed
     }
 
     private var pendingTasksSummary: String {
         QuickResumeCopy.pendingTasksSummary(pendingCount: game.tasks.filter { !$0.isDone }.count)
     }
 
+    private func noteRowHeight(for note: GameNote) -> CGFloat {
+        let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let characterCount = max(trimmed.count, note.photoData == nil ? 0 : 16)
+        let estimatedLines = min(4, max(1, Int(ceil(Double(characterCount) / 34.0))))
+        let textHeight = CGFloat(estimatedLines) * 24
+        let imageHeight: CGFloat = note.photoData == nil ? 0 : 156
+        let spacing: CGFloat = note.photoData == nil ? 0 : 8
+        let timestampHeight: CGFloat = 18
+        let verticalPadding: CGFloat = 24
+        let bottomSpacing: CGFloat = 8
+        return textHeight + imageHeight + spacing + timestampHeight + verticalPadding + bottomSpacing
+    }
+
+    private var canSaveQuickNote: Bool {
+        quickNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || quickNoteImageData != nil
+    }
+
+    private var canSaveEditedNote: Bool {
+        editingNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || editingNoteImageData != nil
+    }
+
+    private var isShowingImagePreview: Binding<Bool> {
+        Binding(
+            get: { previewImageData != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    previewImageData = nil
+                }
+            }
+        )
+    }
+
+    private var isShowingResumeImagePreview: Binding<Bool> {
+        Binding(
+            get: { resumePreviewImageData != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    resumePreviewImageData = nil
+                }
+            }
+        )
+    }
+
     private func quickSaveNote() {
         let trimmed = quickNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard trimmed.isEmpty == false || quickNoteImageData != nil else { return }
 
-        let note = GameNote(text: trimmed, game: game)
+        let note = GameNote(text: trimmed, photoData: quickNoteImageData, game: game)
         modelContext.insert(note)
         game.notes.insert(note, at: 0)
-        game.lastPlayedAt = .now
-        quickNoteText = ""
+        clearQuickNoteDraft()
         Haptics.success()
         saveContext()
         showSavedMessage("Checkpoint saved")
@@ -1430,7 +1671,6 @@ private struct GameDetailView: View {
         let task = GameTask(text: trimmed, isDone: false, game: game)
         modelContext.insert(task)
         game.tasks.append(task)
-        game.lastPlayedAt = .now
         quickTaskText = ""
         Haptics.success()
         saveContext()
@@ -1462,28 +1702,32 @@ private struct GameDetailView: View {
 
     private func beginEditing(_ note: GameNote) {
         editingNoteText = note.text
+        editingNoteImageData = note.photoData
+        editingNotePhotoItem = nil
         editingNote = note
     }
 
     private func beginAddingResource() {
-        editingResource = nil
         resourceDraftTitle = ""
         resourceDraftURL = ""
-        activeSheet = .quickResource
+        activeResourceEditor = .add
     }
 
     private func beginEditing(_ resource: GameResource) {
-        editingResource = resource
         resourceDraftTitle = resource.title
         resourceDraftURL = resource.urlString
+        activeResourceEditor = .edit(resource)
     }
 
     private func saveEditedNote() {
         let trimmed = editingNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let editingNote else { return }
+        guard (trimmed.isEmpty == false || editingNoteImageData != nil), let editingNote else { return }
         editingNote.text = trimmed
+        editingNote.photoData = editingNoteImageData
         saveContext()
         showSavedMessage("Checkpoint updated")
+        editingNotePhotoItem = nil
+        editingNoteImageData = nil
         self.editingNote = nil
     }
 
@@ -1503,15 +1747,28 @@ private struct GameDetailView: View {
         showSavedMessage("Task deleted")
     }
 
+    private func clearQuickNoteDraft() {
+        quickNoteText = ""
+        quickNotePhotoItem = nil
+        quickNoteImageData = nil
+    }
+
+    private func toggleTask(_ task: GameTask) {
+        withAnimation(.snappy(duration: 0.2)) {
+            task.isDone.toggle()
+        }
+        Haptics.tap()
+        saveContext()
+    }
+
     private func saveResourceDraft() {
         guard let normalized = normalizedResourceURL(resourceDraftURL) else { return }
         let trimmedTitle = resourceDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let editingResource {
-            editingResource.title = trimmedTitle
-            editingResource.urlString = normalized.absoluteString
+        if let resourceBeingEdited {
+            resourceBeingEdited.title = trimmedTitle
+            resourceBeingEdited.urlString = normalized.absoluteString
             showSavedMessage("Link updated")
-            self.editingResource = nil
         } else {
             let resource = GameResource(
                 title: trimmedTitle,
@@ -1524,7 +1781,7 @@ private struct GameDetailView: View {
         }
 
         clearResourceDraft()
-        activeSheet = nil
+        activeResourceEditor = nil
         saveContext()
     }
 
@@ -1564,6 +1821,15 @@ private struct GameDetailView: View {
         openURL(url)
     }
 
+    private func markGameResumed(now: Date = .now) {
+        game.lastPlayedAt = GameLastPlayedPolicy.updatedValue(
+            for: game.lastPlayedAt,
+            action: .resume,
+            now: now
+        )
+        saveContext()
+    }
+
     private func saveContext() {
         do {
             try modelContext.save()
@@ -1571,6 +1837,51 @@ private struct GameDetailView: View {
         } catch {
             assertionFailure("Failed saving changes: \(error)")
         }
+    }
+
+    private func noteDisplayText(for note: GameNote) -> String? {
+        let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return note.photoData == nil ? nil : "Photo checkpoint"
+        }
+        return trimmed
+    }
+
+    private func notePreviewImage(from data: Data?) -> UIImage? {
+        guard let data else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func optimizedNoteImageData(from originalData: Data?) -> Data? {
+        guard let originalData,
+              let image = UIImage(data: originalData) else {
+            return nil
+        }
+
+        let maxDimension: CGFloat = 1800
+        let maxArea: CGFloat = 3_200_000
+        let originalSize = image.size
+
+        guard originalSize.width > 0, originalSize.height > 0 else {
+            return nil
+        }
+
+        let dimensionScale = min(1, maxDimension / max(originalSize.width, originalSize.height))
+        let areaScale = min(1, sqrt(maxArea / (originalSize.width * originalSize.height)))
+        let scale = min(dimensionScale, areaScale)
+        let targetSize = CGSize(
+            width: max(1, floor(originalSize.width * scale)),
+            height: max(1, floor(originalSize.height * scale))
+        )
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+
+        return resizedImage.jpegData(compressionQuality: 0.8)
     }
 
     private func deleteGame() {
@@ -1590,12 +1901,10 @@ private struct GameDetailView: View {
             savedMessage = message
         }
 
-        savedMessageTask = Task {
+        savedMessageTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_200_000_000)
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    savedMessage = nil
-                }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                savedMessage = nil
             }
         }
     }
@@ -1718,7 +2027,10 @@ private struct AddEditGameView: View {
             }
             .onChange(of: selectedPhotoItem) { _, newItem in
                 Task {
-                    coverImageData = try? await newItem?.loadTransferable(type: Data.self)
+                    let loadedData = try? await newItem?.loadTransferable(type: Data.self)
+                    await MainActor.run {
+                        coverImageData = loadedData
+                    }
                 }
             }
         }
@@ -2076,7 +2388,7 @@ private struct CheckpointBackupDocument: FileDocument {
 }
 
 private struct CheckpointBackup: Codable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let schemaVersion: Int
     let exportedAt: Date
@@ -2140,6 +2452,29 @@ private struct CheckpointBackup: Codable {
         let id: UUID
         let createdAt: Date
         let text: String
+        let photoData: Data?
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case createdAt
+            case text
+            case photoData
+        }
+
+        init(id: UUID, createdAt: Date, text: String, photoData: Data?) {
+            self.id = id
+            self.createdAt = createdAt
+            self.text = text
+            self.photoData = photoData
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(UUID.self, forKey: .id)
+            createdAt = try container.decode(Date.self, forKey: .createdAt)
+            text = try container.decode(String.self, forKey: .text)
+            photoData = try container.decodeIfPresent(Data.self, forKey: .photoData)
+        }
     }
 
     struct TaskSnapshot: Codable {
@@ -2172,7 +2507,8 @@ private struct CheckpointBackup: Codable {
                         NoteSnapshot(
                             id: note.id,
                             createdAt: note.createdAt,
-                            text: note.text
+                            text: note.text,
+                            photoData: note.photoData
                         )
                     },
                     tasks: game.tasks.map { task in

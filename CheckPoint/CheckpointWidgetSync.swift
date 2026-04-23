@@ -3,6 +3,7 @@ import SwiftData
 import UIKit
 import WidgetKit
 
+@MainActor
 enum CheckpointWidgetSync {
     static func sync(games: [Game]) {
         CheckpointWidgetSnapshotStore.save(makeSnapshot(from: games))
@@ -40,13 +41,13 @@ enum CheckpointWidgetSync {
     }
 
     private static func makeFeaturedGame(from game: Game) -> FeaturedGame {
-        let latestNoteRaw = game.notes
+        let latestNote = game.notes
             .sorted { $0.createdAt > $1.createdAt }
-            .first?
-            .text
-        let latestNote = latestNoteRaw.flatMap { note in
-            nonEmptyValue(note.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
+            .first
+            .flatMap { note in
+                let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return nonEmptyValue(trimmed) ?? (note.photoData == nil ? nil : "Photo checkpoint")
+            }
 
         let nextTaskRaw = game.tasks
             .filter { !$0.isDone }

@@ -241,23 +241,17 @@ private struct CheckPointResumeWidgetView: View {
                             .foregroundStyle(widgetAccent.opacity(0.95))
                     }
 
-                    Text("Pick up where you left off")
-                        .font(.title3.weight(.black))
-                        .foregroundStyle(.white)
-                        .padding(.top, 4)
-                        .shadow(color: .black.opacity(0.24), radius: 8, x: 0, y: 4)
-
                     VStack(spacing: 8) {
-                        ForEach(Array(entry.snapshot.recentGames.prefix(4).enumerated()), id: \.element.id) { index, game in
-                            largeRow(for: game, isFirst: index == 0)
+                        ForEach(Array(entry.snapshot.recentGames.prefix(4)), id: \.id) { game in
+                            largeRow(for: game)
                         }
                     }
-                    .padding(.top, 14)
+                    .padding(.top, 12)
 
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
+                .padding(.horizontal, 24)
+                .padding(.top, 22)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(contentPanelBackground)
@@ -271,11 +265,11 @@ private struct CheckPointResumeWidgetView: View {
                         .fill(widgetAccent)
                         .frame(width: 88, height: 6)
                         .padding(.top, 2)
-                        .padding(.leading, 18)
+                        .padding(.leading, 24)
                 }
                 .shadow(color: .black.opacity(0.26), radius: 22, x: 0, y: 12)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
             }
         }
     }
@@ -323,43 +317,53 @@ private struct CheckPointResumeWidgetView: View {
             }
     }
 
-    private func largeRow(for game: FeaturedGame, isFirst: Bool) -> some View {
+    private func largeRow(for game: FeaturedGame) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            coverThumbnail(for: game, size: isFirst ? 46 : 38)
+            coverThumbnail(for: game, size: 36)
 
-            VStack(alignment: .leading, spacing: isFirst ? 5 : 3) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(game.title)
-                    .font((isFirst ? Font.headline : .subheadline).weight(.bold))
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
-                Text(CheckpointActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                    .font(isFirst ? .caption.weight(.semibold) : .caption2.weight(.semibold))
+                Text(CheckpointActivityFormatter.compactLastActivityLabel(for: game.lastPlayedAt))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(widgetAccent.opacity(0.9))
                     .lineLimit(1)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 10)
 
-            if game.pendingTasksCount > 0 {
-                compactTasksBadge(pendingCount: game.pendingTasksCount)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.white.opacity(0.65))
-            }
+            largeTrailingStatus(for: game)
         }
-        .padding(.horizontal, isFirst ? 12 : 10)
-        .padding(.vertical, isFirst ? 10 : 8)
-        .frame(maxWidth: .infinity, minHeight: isFirst ? 66 : 52, maxHeight: isFirst ? 66 : 52, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: isFirst ? 18 : 16, style: .continuous)
-                .fill(Color.black.opacity(isFirst ? 0.26 : 0.18))
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(0.20))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: isFirst ? 18 : 16, style: .continuous)
-                .strokeBorder(widgetAccent.opacity(isFirst ? 0.24 : 0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(widgetAccent.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func largeTrailingStatus(for game: FeaturedGame) -> some View {
+        if game.pendingTasksCount > 0 {
+            Text(game.pendingTasksCount == 1 ? "1 task" : "\(game.pendingTasksCount) tasks")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(width: 68, alignment: .trailing)
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.white.opacity(0.65))
+                .frame(width: 68, alignment: .trailing)
         }
     }
 
@@ -386,7 +390,9 @@ private struct CheckPointResumeWidgetView: View {
 
     @ViewBuilder
     private var backgroundLayer: some View {
-        if let featuredGame = entry.snapshot.featuredGame {
+        if family == .systemLarge {
+            fallbackBackground
+        } else if let featuredGame = entry.snapshot.featuredGame {
             backgroundArt(for: featuredGame)
         } else {
             fallbackBackground

@@ -44,17 +44,20 @@ final class GameNote {
     var id: UUID
     var createdAt: Date
     var text: String
+    var photoData: Data?
     var game: Game?
 
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
         text: String,
+        photoData: Data? = nil,
         game: Game? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
         self.text = text
+        self.photoData = photoData
         self.game = game
     }
 }

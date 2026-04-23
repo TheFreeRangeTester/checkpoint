@@ -61,6 +61,21 @@ enum CheckpointActivityFormatter {
         if weeks == 1 { return "Played 1 week ago" }
         return "Played \(weeks) weeks ago"
     }
+
+    static func compactLastActivityLabel(for lastPlayedAt: Date?, now: Date = .now, calendar: Calendar = .current) -> String {
+        guard let lastPlayedAt else { return "No session" }
+
+        let start = calendar.startOfDay(for: lastPlayedAt)
+        let end = calendar.startOfDay(for: now)
+        let days = max(0, calendar.dateComponents([.day], from: start, to: end).day ?? 0)
+
+        if days == 0 { return "Today" }
+        if days == 1 { return "Yesterday" }
+        if days < 7 { return "\(days)d ago" }
+
+        let weeks = max(1, days / 7)
+        return "\(weeks)w ago"
+    }
 }
 
 enum CheckpointWidgetSnapshotStore {
