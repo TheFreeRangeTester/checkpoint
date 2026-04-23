@@ -1246,11 +1246,18 @@ private struct GameDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 8) {
+                List {
                     ForEach(sortedResources) { resource in
                         resourceRow(resource)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
                 }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .frame(height: resourcesListHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1259,71 +1266,73 @@ private struct GameDetailView: View {
     }
 
     private func resourceRow(_ resource: GameResource) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(resource.displayTitle)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+        Button {
+            open(resource)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(resource.displayTitle)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
 
-                    Text(resource.urlString)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text(resource.urlString)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(QuietConsoleTheme.accent)
+                        .padding(.top, 1)
                 }
 
-                Spacer(minLength: 8)
+                HStack(spacing: 8) {
+                    Text(resource.kindLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(resource.kindTint)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(resource.kindTint.opacity(0.14))
+                        )
 
-                Text(resource.kindLabel)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(resource.kindTint)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(resource.kindTint.opacity(0.14))
-                    )
-            }
+                    Spacer(minLength: 0)
 
-            Text(resource.lastUsedLabel)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            HStack(spacing: 8) {
-                Button {
-                    open(resource)
-                } label: {
-                    Label("Open", systemImage: "arrow.up.right")
-                }
-                .tint(QuietConsoleTheme.accent)
-
-                Button {
-                    beginEditing(resource)
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .tint(QuietConsoleTheme.accent)
-
-                Spacer(minLength: 0)
-
-                Button(role: .destructive) {
-                    resourcePendingDeletion = resource
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                    Text(resource.lastUsedLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.bordered)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(QuietConsoleTheme.secondaryFill)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(QuietConsoleTheme.secondaryFill)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                beginEditing(resource)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(QuietConsoleTheme.accent)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button("Delete", role: .destructive) {
+                resourcePendingDeletion = resource
+            }
+            .tint(.red)
+        }
     }
 
     private var quickNoteComposer: some View {
@@ -1573,6 +1582,12 @@ private struct GameDetailView: View {
 
     private var resourceBeingEdited: GameResource? {
         activeResourceEditor?.resource
+    }
+
+    private var resourcesListHeight: CGFloat {
+        let rowHeight: CGFloat = 96
+        let rowSpacing: CGFloat = 8
+        return CGFloat(sortedResources.count) * (rowHeight + rowSpacing)
     }
 
     private var sortedTasks: [GameTask] {
