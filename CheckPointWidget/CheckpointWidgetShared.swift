@@ -32,9 +32,9 @@ struct FeaturedGame: Codable, Sendable {
 }
 
 enum CheckpointResumeCopy {
-    static let latestNotePrefix = "Latest note"
-    static let latestNoteFallback = "No checkpoints yet. Add one before you jump back in."
-    static let nextTaskFallback = "Ready to jump back in."
+    static let latestNotePrefix = "Last Session"
+    static let latestNoteFallback = "No session notes yet."
+    static let nextTaskFallback = "Review your last checkpoint"
     static let emptyWidgetTitle = "Resume Session"
     static let emptyWidgetMessage = "Add a game and save a checkpoint to see it here."
 
