@@ -666,13 +666,8 @@ private struct GameDetailHeaderView: View {
     let accentColor: Color
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             background
-
-            Circle()
-                .fill(.white.opacity(0.10))
-                .frame(width: 132, height: 132)
-                .offset(x: 44, y: -52)
 
             HStack(alignment: .center, spacing: 14) {
                 thumbnail
@@ -712,16 +707,38 @@ private struct GameDetailHeaderView: View {
         )
     }
 
+    @ViewBuilder
     private var background: some View {
-        LinearGradient(
-            colors: [
-                accentColor,
-                accentColor.opacity(0.72),
-                Color(uiColor: .systemGray).opacity(0.56)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        if let coverImageData,
+           let image = UIImage(data: coverImageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .blur(radius: 14)
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.66),
+                            Color.black.opacity(0.48),
+                            accentColor.opacity(0.44)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .overlay(Color.black.opacity(0.12))
+                .clipped()
+        } else {
+            LinearGradient(
+                colors: [
+                    accentColor,
+                    accentColor.opacity(0.72),
+                    Color(uiColor: .systemGray).opacity(0.56)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     @ViewBuilder
@@ -824,6 +841,79 @@ private struct FloatingAddButton: View {
     }
 }
 
+private struct FloatingBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Games", systemImage: "chevron.left")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.leading, 15)
+                .padding(.trailing, 18)
+                .frame(height: 58)
+                .background(Capsule(style: .continuous).fill(QuietConsoleTheme.accent))
+                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Games")
+    }
+}
+
+private struct FloatingAddMenu: View {
+    let addTask: () -> Void
+    let addNote: () -> Void
+    let addResource: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            menuButton("Add Task", systemImage: "checklist", action: addTask)
+            menuButton("Add Note", systemImage: "note.text", action: addNote)
+            menuButton("Add Resource", systemImage: "link", action: addResource)
+        }
+        .padding(6)
+        .frame(width: 190, alignment: .leading)
+        .quietSurface(.elevated, cornerRadius: 14)
+        .transition(.scale(scale: 0.94, anchor: .bottomTrailing).combined(with: .opacity))
+    }
+
+    private func menuButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SwipeBackRestorer: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        DispatchQueue.main.async {
+            guard let navigationController = uiViewController.navigationController else { return }
+            navigationController.interactivePopGestureRecognizer?.isEnabled = true
+            navigationController.interactivePopGestureRecognizer?.delegate = nil
+        }
+    }
+
+    private final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+            navigationController?.interactivePopGestureRecognizer?.delegate = nil
+        }
+    }
+}
+
 private struct GameDetailView: View {
     private enum ActiveSheet: String, Identifiable {
         case edit
@@ -858,8 +948,6 @@ private struct GameDetailView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.openURL) private var openURL
     @Bindable var game: Game
 
@@ -875,6 +963,8 @@ private struct GameDetailView: View {
     @State private var editingNoteText = ""
     @State private var editingNotePhotoItem: PhotosPickerItem?
     @State private var editingNoteImageData: Data?
+    @State private var editingTask: GameTask?
+    @State private var editingTaskText = ""
     @State private var previewImageData: Data?
     @State private var resumePreviewImageData: Data?
     @State private var notePendingDeletion: GameNote?
@@ -887,6 +977,7 @@ private struct GameDetailView: View {
     @State private var showingCompletedTasks = false
     @FocusState private var isQuickNoteFieldFocused: Bool
     @FocusState private var isQuickTaskFieldFocused: Bool
+    @FocusState private var isEditTaskFieldFocused: Bool
     @FocusState private var isResourceURLFieldFocused: Bool
     @FocusState private var isEditNoteFieldFocused: Bool
 
@@ -918,7 +1009,7 @@ private struct GameDetailView: View {
         }
         .background(QuietConsoleTheme.canvas)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(alignment: .trailing, spacing: 10) {
+            VStack(spacing: 10) {
                 if let savedMessage {
                     Text(savedMessage)
                         .font(.footnote.weight(.bold))
@@ -928,12 +1019,39 @@ private struct GameDetailView: View {
                         .quietSurface(.elevated, cornerRadius: 12)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                         .accessibilityLabel(savedMessage)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
-                HStack {
-                    Spacer()
+                if showingAddActions {
+                    FloatingAddMenu(
+                        addTask: {
+                            closeFloatingAddMenu()
+                            activeSheet = .quickTask
+                        },
+                        addNote: {
+                            closeFloatingAddMenu()
+                            activeSheet = .quickNote
+                        },
+                        addResource: {
+                            closeFloatingAddMenu()
+                            beginAddingResource()
+                        }
+                    )
+                    .padding(.trailing, 8)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+
+                HStack(alignment: .bottom) {
+                    FloatingBackButton {
+                        dismiss()
+                    }
+
+                    Spacer(minLength: 16)
+
                     FloatingAddButton {
-                        showingAddActions = true
+                        withAnimation(.snappy(duration: 0.18)) {
+                            showingAddActions.toggle()
+                        }
                     }
                 }
             }
@@ -942,6 +1060,8 @@ private struct GameDetailView: View {
         }
         .navigationTitle(game.title)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .background(SwipeBackRestorer().frame(width: 0, height: 0))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -1000,6 +1120,9 @@ private struct GameDetailView: View {
         .sheet(item: $editingNote) { _ in
             editNoteComposer
         }
+        .sheet(item: $editingTask) { _ in
+            editTaskComposer
+        }
         .sheet(item: $activeResourceEditor) { _ in
             resourceComposer
         }
@@ -1009,113 +1132,6 @@ private struct GameDetailView: View {
                 dismissAction: { previewImageData = nil }
             )
         }
-        .confirmationDialog("Add to game", isPresented: $showingAddActions, titleVisibility: .visible) {
-            Button("Add Task") {
-                activeSheet = .quickTask
-            }
-            Button("Add Note") {
-                activeSheet = .quickNote
-            }
-            Button("Add Resource") {
-                beginAddingResource()
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-    }
-
-    private var quickResumeCard: some View {
-        VStack(alignment: .leading, spacing: compactQuickResumeLayout ? 8 : 12) {
-            HStack {
-                Text("Session Checkpoint")
-                    .font(compactQuickResumeLayout ? .headline.weight(.bold) : .title3.weight(.bold))
-                    .fontDesign(.rounded)
-
-                Spacer()
-
-                Button { activeSheet = .quickTask } label: { Text("+ Task") }
-                    .buttonStyle(.borderedProminent)
-                    .tint(QuietConsoleTheme.accent)
-                    .controlSize(compactQuickResumeLayout ? .small : .regular)
-
-                Button { activeSheet = .quickNote } label: { Text("+ Note") }
-                    .buttonStyle(.borderedProminent)
-                    .tint(QuietConsoleTheme.accent)
-                    .controlSize(compactQuickResumeLayout ? .small : .regular)
-
-                Button { beginAddingResource() } label: { Text("+ Link") }
-                    .buttonStyle(.borderedProminent)
-                    .tint(QuietConsoleTheme.accent)
-                    .controlSize(compactQuickResumeLayout ? .small : .regular)
-            }
-
-            Button {
-                markGameResumed()
-                activeSheet = .resume
-            } label: {
-                Label(compactQuickResumeLayout ? "Resume" : "Resume Session", systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .tint(QuietConsoleTheme.accent)
-            .controlSize(compactQuickResumeLayout ? .small : .regular)
-
-            Text("\(QuickResumeCopy.latestNotePrefix):")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            Text(latestNoteText)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(pendingTasksSummary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if sortedResources.isEmpty == false {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Resources:")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    ForEach(sortedResources.prefix(2)) { resource in
-                        Button {
-                            open(resource)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "link")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(QuietConsoleTheme.accent)
-                                Text(resource.displayTitle)
-                                    .font(.footnote.weight(.medium))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Spacer(minLength: 8)
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            if let savedMessage {
-                Text(savedMessage)
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(QuietConsoleTheme.accent)
-                    .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
-                    .accessibilityLabel(savedMessage)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .quietSurface(.elevated, cornerRadius: 20)
     }
 
     private var resumeSessionSheet: some View {
@@ -1141,21 +1157,31 @@ private struct GameDetailView: View {
                                     Capsule(style: .continuous)
                                         .fill(QuietConsoleTheme.activityFill)
                                 )
-
-                            Text(pendingTasksSummary)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Latest note")
+                        Text("Current Objective")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
 
-                        Text(latestNoteText)
+                        Text(currentObjectiveText)
                             .font(.title3.weight(.medium))
                             .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .quietSurface(.secondary, cornerRadius: 16)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Last Session")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Text(lastSessionText)
+                            .font(.body)
+                            .foregroundStyle(hasSessionNotes ? .primary : .secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let latestNotePreviewImage {
@@ -1178,7 +1204,7 @@ private struct GameDetailView: View {
                     .quietSurface(.secondary, cornerRadius: 16)
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Up next")
+                        Text("Now")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
 
@@ -1405,29 +1431,39 @@ private struct GameDetailView: View {
     }
 
     private func taskRow(_ task: GameTask) -> some View {
-        Button {
-            toggleTask(task)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(task.isDone ? .green : QuietConsoleTheme.accent)
+        HStack(spacing: 8) {
+            Button {
+                toggleTask(task)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(task.isDone ? .green : QuietConsoleTheme.accent)
 
-                Text(task.text)
-                    .font(.body)
-                    .foregroundStyle(task.isDone ? .secondary : .primary)
-                    .strikethrough(task.isDone)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(task.text)
+                        .font(.body)
+                        .foregroundStyle(task.isDone ? .secondary : .primary)
+                        .strikethrough(task.isDone)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 9)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button("Delete", role: .destructive) {
-                deleteTask(task)
+            .buttonStyle(.plain)
+
+            rowActionsMenu {
+                Button {
+                    beginEditing(task)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    deleteTask(task)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
-            .tint(.red)
         }
     }
 
@@ -1448,22 +1484,20 @@ private struct GameDetailView: View {
     }
 
     private func noteRow(_ note: GameNote) -> some View {
-        Button {
-            beginEditing(note)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                if let displayText = noteDisplayText(for: note) {
-                    Text(displayText)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+        HStack(alignment: .top, spacing: 8) {
+            Button {
+                beginEditing(note)
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let displayText = noteDisplayText(for: note) {
+                        Text(displayText)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
-                if let image = notePreviewImage(from: note.photoData) {
-                    Button {
-                        previewImageData = note.photoData
-                    } label: {
+                    if let image = notePreviewImage(from: note.photoData) {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
@@ -1471,23 +1505,37 @@ private struct GameDetailView: View {
                             .frame(height: 132)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open note photo")
+
+                    Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            rowActionsMenu {
+                Button {
+                    beginEditing(note)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
                 }
 
-                Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if note.photoData != nil {
+                    Button {
+                        previewImageData = note.photoData
+                    } label: {
+                        Label("View Photo", systemImage: "photo")
+                    }
+                }
+
+                Button(role: .destructive) {
+                    notePendingDeletion = note
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button("Delete", role: .destructive) {
-                notePendingDeletion = note
-            }
-            .tint(.red)
         }
     }
 
@@ -1508,53 +1556,71 @@ private struct GameDetailView: View {
     }
 
     private func resourceRow(_ resource: GameResource) -> some View {
-        Button {
-            open(resource)
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(resource.displayTitle)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+        HStack(alignment: .top, spacing: 8) {
+            Button {
+                open(resource)
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(resource.displayTitle)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
 
-                    Text(resource.shortURLLabel)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text(resource.shortURLLabel)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
 
-                    if let lastUsedAt = resource.lastUsedAt {
-                        Text("Opened \(lastUsedAt.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                        if let lastUsedAt = resource.lastUsedAt {
+                            Text("Opened \(lastUsedAt.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "arrow.up.right")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(QuietConsoleTheme.accent)
+                        .padding(.top, 2)
+                }
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            rowActionsMenu {
+                Button {
+                    beginEditing(resource)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
                 }
 
-                Spacer(minLength: 8)
-
-                Image(systemName: "arrow.up.right")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(QuietConsoleTheme.accent)
-                    .padding(.top, 2)
+                Button(role: .destructive) {
+                    resourcePendingDeletion = resource
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
             }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
+        }
+    }
+
+    private func rowActionsMenu<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        Menu {
+            content()
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(QuietConsoleTheme.secondaryFill))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            Button {
-                beginEditing(resource)
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tint(QuietConsoleTheme.accent)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button("Delete", role: .destructive) {
-                resourcePendingDeletion = resource
-            }
-            .tint(.red)
-        }
+        .accessibilityLabel("More actions")
+        .padding(.top, 6)
     }
 
     private var quickNoteComposer: some View {
@@ -1633,6 +1699,38 @@ private struct GameDetailView: View {
                 }
             }
             .onAppear { isQuickTaskFieldFocused = true }
+        }
+        .presentationDetents([.height(190)])
+    }
+
+    private var editTaskComposer: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Task", text: $editingTaskText)
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.done)
+                    .focused($isEditTaskFieldFocused)
+                    .onSubmit { saveEditedTask() }
+
+                Button("Save Changes") {
+                    saveEditedTask()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(QuietConsoleTheme.accent)
+                .disabled(editingTaskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(16)
+            .navigationTitle("Edit Task")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        editingTask = nil
+                        editingTaskText = ""
+                    }
+                }
+            }
+            .onAppear { isEditTaskFieldFocused = true }
         }
         .presentationDetents([.height(190)])
     }
@@ -1870,22 +1968,6 @@ private struct GameDetailView: View {
         return trimmed
     }
 
-    private var latestNoteText: String {
-        guard let latestNote = sortedNotes.first else {
-            return QuickResumeCopy.latestNoteFallback
-        }
-
-        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return latestNote.photoData == nil ? QuickResumeCopy.latestNoteFallback : "Photo checkpoint"
-        }
-        return trimmed
-    }
-
-    private var pendingTasksSummary: String {
-        QuickResumeCopy.pendingTasksSummary(pendingCount: game.tasks.filter { !$0.isDone }.count)
-    }
-
     private func noteRowHeight(for note: GameNote) -> CGFloat {
         let trimmed = note.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let characterCount = max(trimmed.count, note.photoData == nil ? 0 : 16)
@@ -1986,10 +2068,21 @@ private struct GameDetailView: View {
         editingNote = note
     }
 
+    private func beginEditing(_ task: GameTask) {
+        editingTaskText = task.text
+        editingTask = task
+    }
+
     private func beginAddingResource() {
         resourceDraftTitle = ""
         resourceDraftURL = ""
         activeResourceEditor = .add
+    }
+
+    private func closeFloatingAddMenu() {
+        withAnimation(.snappy(duration: 0.18)) {
+            showingAddActions = false
+        }
     }
 
     private func beginEditing(_ resource: GameResource) {
@@ -2008,6 +2101,16 @@ private struct GameDetailView: View {
         editingNotePhotoItem = nil
         editingNoteImageData = nil
         self.editingNote = nil
+    }
+
+    private func saveEditedTask() {
+        let trimmed = editingTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false, let editingTask else { return }
+        editingTask.text = trimmed
+        saveContext()
+        showSavedMessage("Task updated")
+        self.editingTask = nil
+        editingTaskText = ""
     }
 
     private func deletePendingNote() {
@@ -2188,9 +2291,6 @@ private struct GameDetailView: View {
         }
     }
 
-    private var compactQuickResumeLayout: Bool {
-        horizontalSizeClass == .compact && !dynamicTypeSize.isAccessibilitySize
-    }
 }
 
 private struct AddEditGameView: View {
@@ -2481,15 +2581,6 @@ private struct QuietSurfaceModifier: ViewModifier {
 private extension View {
     func quietSurface(_ style: QuietSurfaceStyle, cornerRadius: CGFloat) -> some View {
         modifier(QuietSurfaceModifier(style: style, cornerRadius: cornerRadius))
-    }
-}
-
-private enum QuickResumeCopy {
-    static let latestNotePrefix = CheckpointResumeCopy.latestNotePrefix
-    static let latestNoteFallback = CheckpointResumeCopy.latestNoteFallback
-
-    static func pendingTasksSummary(pendingCount: Int) -> String {
-        CheckpointResumeCopy.pendingTasksSummary(pendingCount: pendingCount)
     }
 }
 
