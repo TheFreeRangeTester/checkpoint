@@ -175,11 +175,13 @@ private struct LibraryView: View {
 
     @ViewBuilder
     private func gameRow(for game: Game) -> some View {
-        NavigationLink(value: game.id) {
-            GameCardView(game: game)
+        Button {
+            navigationPath.append(game.id)
+        } label: {
+            GameRowView(game: game)
         }
         .buttonStyle(.plain)
-        .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
@@ -555,48 +557,57 @@ private enum FeedbackKind {
     }
 }
 
-private struct GameCardView: View {
+private struct GameRowView: View {
     let game: Game
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             coverImage
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(game.title)
-                    .font(.title3.weight(.bold))
+                    .font(.headline.weight(.semibold))
                     .fontDesign(.rounded)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(QuietConsoleTheme.activityText)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(QuietConsoleTheme.activityFill)
-                    )
-
-                if let latestNoteText {
-                    Text(latestNoteText)
-                        .font(.footnote.weight(.medium))
+                HStack(spacing: 8) {
+                    Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+
+                    Text(activeTaskLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(game.stableAccentColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(game.stableAccentColor.opacity(0.14))
+                        )
                 }
+
+                Text(objectivePreview)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
-
-            Spacer(minLength: 0)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .quietSurface(.primary, cornerRadius: 18)
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(QuietConsoleTheme.primaryFill)
+        }
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(game.stableAccentColor)
+                .frame(width: 3)
+                .padding(.vertical, 12)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder
@@ -606,34 +617,210 @@ private struct GameCardView: View {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 68, height: 68)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(width: 58, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .strokeBorder(QuietConsoleTheme.cardBorder, lineWidth: 1)
                 )
         } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(QuietConsoleTheme.secondaryFill)
-                .frame(width: 68, height: 68)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(game.stableAccentColor.opacity(0.16))
+                .frame(width: 58, height: 58)
                 .overlay {
                     Image(systemName: "photo")
-                        .font(.system(size: 20, weight: .regular))
-                        .foregroundStyle(QuietConsoleTheme.subtleText)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(game.stableAccentColor)
                 }
         }
     }
 
-    private var latestNoteText: String? {
-        guard let latestNote = game.notes.sorted(by: { $0.createdAt > $1.createdAt }).first else {
-            return nil
+    private var activeTaskLabel: String {
+        let count = game.tasks.filter { !$0.isDone }.count
+        return count == 1 ? "1 active task" : "\(count) active tasks"
+    }
+
+    private var objectivePreview: String {
+        if let task = game.tasks
+            .filter({ !$0.isDone })
+            .sorted(by: { $0.createdAt < $1.createdAt })
+            .first {
+            return task.text
         }
 
-        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return latestNote.photoData == nil ? nil : "Photo checkpoint"
+        if let latestNote = game.notes.sorted(by: { $0.createdAt > $1.createdAt }).first {
+            let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty == false { return trimmed }
+            if latestNote.photoData != nil { return "Photo checkpoint" }
         }
-        return trimmed
+
+        return "Review your last checkpoint"
+    }
+}
+
+private struct GameDetailHeaderView: View {
+    let title: String
+    let coverImageData: Data?
+    let lastPlayedLabel: String
+    let activeTaskCount: Int
+    let accentColor: Color
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            background
+
+            Circle()
+                .fill(.white.opacity(0.10))
+                .frame(width: 132, height: 132)
+                .offset(x: 44, y: -52)
+
+            HStack(alignment: .center, spacing: 14) {
+                thumbnail
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
+                        .font(.title2.weight(.bold))
+                        .fontDesign(.rounded)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        Text(lastPlayedLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.92))
+
+                        Text(activeTaskLabel)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(.white.opacity(0.18))
+                            )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(16)
+        }
+        .frame(minHeight: 148)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                accentColor,
+                accentColor.opacity(0.72),
+                Color(uiColor: .systemGray).opacity(0.56)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let coverImageData,
+           let image = UIImage(data: coverImageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.white.opacity(0.16))
+                .frame(width: 72, height: 72)
+                .overlay {
+                    Image(systemName: "gamecontroller.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+        }
+    }
+
+    private var activeTaskLabel: String {
+        activeTaskCount == 1 ? "1 active task" : "\(activeTaskCount) active tasks"
+    }
+}
+
+private struct ContinuePlayingButton: View {
+    let objective: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Label("CONTINUE PLAYING", systemImage: "play.fill")
+                    .font(.headline.weight(.bold))
+                    .labelStyle(.titleAndIcon)
+
+                Text(objective)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white.opacity(0.88))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(QuietConsoleTheme.accent)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DetailSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .quietSurface(.primary, cornerRadius: 14)
+    }
+}
+
+private struct FloatingAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 58, height: 58)
+                .background(Circle().fill(QuietConsoleTheme.accent))
+                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add")
     }
 }
 
@@ -695,6 +882,9 @@ private struct GameDetailView: View {
     @State private var resourcePendingDeletion: GameResource?
     @State private var resourceDraftTitle = ""
     @State private var resourceDraftURL = ""
+    @State private var showingAddActions = false
+    @State private var showingAllActiveTasks = false
+    @State private var showingCompletedTasks = false
     @FocusState private var isQuickNoteFieldFocused: Bool
     @FocusState private var isQuickTaskFieldFocused: Bool
     @FocusState private var isResourceURLFieldFocused: Bool
@@ -702,22 +892,53 @@ private struct GameDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            VStack(spacing: 18) {
+                GameDetailHeaderView(
+                    title: game.title,
+                    coverImageData: game.coverImageData,
+                    lastPlayedLabel: GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt),
+                    activeTaskCount: pendingTasks.count,
+                    accentColor: game.stableAccentColor
+                )
+
+                ContinuePlayingButton(objective: currentObjectiveText) {
+                    markGameResumed()
+                    activeSheet = .resume
+                }
+
+                currentObjectiveSection
+                activeTasksSection
+                lastSessionSection
                 notesSection
                 resourcesSection
-                tasksSection
+                completedTasksSection
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
         }
         .background(QuietConsoleTheme.canvas)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                quickResumeCard
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 10) {
+                if let savedMessage {
+                    Text(savedMessage)
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(QuietConsoleTheme.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .quietSurface(.elevated, cornerRadius: 12)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .accessibilityLabel(savedMessage)
+                }
+
+                HStack {
+                    Spacer()
+                    FloatingAddButton {
+                        showingAddActions = true
+                    }
+                }
             }
-            .background(QuietConsoleTheme.canvas)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
         .navigationTitle(game.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -787,6 +1008,18 @@ private struct GameDetailView: View {
                 imageData: previewImageData,
                 dismissAction: { previewImageData = nil }
             )
+        }
+        .confirmationDialog("Add to game", isPresented: $showingAddActions, titleVisibility: .visible) {
+            Button("Add Task") {
+                activeSheet = .quickTask
+            }
+            Button("Add Note") {
+                activeSheet = .quickNote
+            }
+            Button("Add Resource") {
+                beginAddingResource()
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -949,7 +1182,7 @@ private struct GameDetailView: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
 
-                        if sortedTasks.isEmpty {
+                        if pendingTasks.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("You're clear")
                                     .font(.headline)
@@ -960,18 +1193,17 @@ private struct GameDetailView: View {
                             }
                         } else {
                             VStack(spacing: 10) {
-                                ForEach(sortedTasks.prefix(4)) { task in
+                                ForEach(pendingTasks.prefix(4)) { task in
                                     Button {
                                         toggleTask(task)
                                     } label: {
                                         HStack(spacing: 12) {
-                                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                            Image(systemName: "circle")
                                                 .font(.body.weight(.semibold))
-                                                .foregroundStyle(task.isDone ? .green : QuietConsoleTheme.accent)
+                                                .foregroundStyle(QuietConsoleTheme.accent)
                                             Text(task.text)
                                                 .font(.body.weight(.medium))
-                                                .foregroundStyle(task.isDone ? .secondary : .primary)
-                                                .strikethrough(task.isDone)
+                                                .foregroundStyle(.primary)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                         .padding(.vertical, 12)
@@ -1081,88 +1313,176 @@ private struct GameDetailView: View {
         }
     }
 
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Notes")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(QuietConsoleTheme.subtleText)
+    private var currentObjectiveSection: some View {
+        DetailSection("Current Objective") {
+            Text(currentObjectiveText)
+                .font(.title3.weight(.semibold))
+                .fontDesign(.rounded)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
-            if sortedNotes.isEmpty {
-                Text("No notes yet. Add a quick checkpoint.")
+    private var lastSessionSection: some View {
+        DetailSection("Last Session") {
+            Text(lastSessionText)
+                .font(.body)
+                .foregroundStyle(hasSessionNotes ? .primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var activeTasksSection: some View {
+        DetailSection("Now") {
+            if pendingTasks.isEmpty {
+                Text("No active tasks.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                List {
-                    ForEach(sortedNotes) { note in
-                        noteRow(note)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                VStack(spacing: 4) {
+                    ForEach(visibleActiveTasks) { task in
+                        taskRow(task)
+                    }
+
+                    if pendingTasks.count > 3 {
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) {
+                                showingAllActiveTasks.toggle()
+                            }
+                        } label: {
+                            Text(showingAllActiveTasks ? "Show less" : "View all")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(QuietConsoleTheme.accent)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .listStyle(.plain)
-                .scrollDisabled(true)
-                .frame(height: notesListHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+
+    private var completedTasksSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    showingCompletedTasks.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("Completed (\(completedTasks.count))")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(showingCompletedTasks ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showingCompletedTasks {
+                if completedTasks.isEmpty {
+                    Text("No completed tasks yet.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(completedTasks) { task in
+                            taskRow(task)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .quietSurface(.primary, cornerRadius: 16)
+        .quietSurface(.primary, cornerRadius: 14)
+    }
+
+    private func taskRow(_ task: GameTask) -> some View {
+        Button {
+            toggleTask(task)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(task.isDone ? .green : QuietConsoleTheme.accent)
+
+                Text(task.text)
+                    .font(.body)
+                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                    .strikethrough(task.isDone)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button("Delete", role: .destructive) {
+                deleteTask(task)
+            }
+            .tint(.red)
+        }
+    }
+
+    private var notesSection: some View {
+        DetailSection("Notes") {
+            if sortedNotes.isEmpty {
+                Text("No notes yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(sortedNotes) { note in
+                        noteRow(note)
+                    }
+                }
+            }
+        }
     }
 
     private func noteRow(_ note: GameNote) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let displayText = noteDisplayText(for: note) {
-                        Text(displayText)
-                            .font(.body)
-                            .lineLimit(4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if let image = notePreviewImage(from: note.photoData) {
-                        Button {
-                            previewImageData = note.photoData
-                        } label: {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 148)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open note photo")
-                    }
-
-                    Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        Button {
+            beginEditing(note)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                if let displayText = noteDisplayText(for: note) {
+                    Text(displayText)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Menu {
-                    Button("Edit Note") {
-                        beginEditing(note)
+                if let image = notePreviewImage(from: note.photoData) {
+                    Button {
+                        previewImageData = note.photoData
+                    } label: {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 132)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(QuietConsoleTheme.subtleText)
-                        .padding(.top, 2)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open note photo")
                 }
-                .accessibilityLabel("Note actions")
+
+                Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(QuietConsoleTheme.secondaryFill)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
                 notePendingDeletion = note
@@ -1171,152 +1491,54 @@ private struct GameDetailView: View {
         }
     }
 
-    private var tasksSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Focus Tasks")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(QuietConsoleTheme.subtleText)
-
-            if sortedTasks.isEmpty {
-                Text("No tasks yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                List {
-                    ForEach(sortedTasks) { task in
-                        Button {
-                            toggleTask(task)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(task.isDone ? .green : .secondary)
-                                Text(task.text)
-                                    .font(.body)
-                                    .foregroundStyle(task.isDone ? .secondary : .primary)
-                                    .strikethrough(task.isDone)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding(.vertical, 10)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("Delete", role: .destructive) {
-                                deleteTask(task)
-                            }
-                            .tint(.red)
-                        }
-                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                .listStyle(.plain)
-                .scrollDisabled(true)
-                .frame(height: tasksListHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .quietSurface(.primary, cornerRadius: 16)
-    }
-
     private var resourcesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Resources")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(QuietConsoleTheme.subtleText)
-
-                Spacer()
-
-                Button {
-                    beginAddingResource()
-                } label: {
-                    Label("Add", systemImage: "plus")
-                        .font(.footnote.weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .tint(QuietConsoleTheme.accent)
-            }
-
+        DetailSection("Resources") {
             if sortedResources.isEmpty {
-                Text("No links yet. Save a guide or video for later.")
+                Text("No resources yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                List {
+                VStack(spacing: 6) {
                     ForEach(sortedResources) { resource in
                         resourceRow(resource)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
                     }
                 }
-                .listStyle(.plain)
-                .scrollDisabled(true)
-                .frame(height: resourcesListHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .quietSurface(.primary, cornerRadius: 16)
     }
 
     private func resourceRow(_ resource: GameResource) -> some View {
         Button {
             open(resource)
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(resource.displayTitle)
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(resource.displayTitle)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                        Text(resource.urlString)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                    Text(resource.shortURLLabel)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if let lastUsedAt = resource.lastUsedAt {
+                        Text("Opened \(lastUsedAt.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(QuietConsoleTheme.accent)
-                        .padding(.top, 1)
                 }
 
-                HStack(spacing: 8) {
-                    Text(resource.kindLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(resource.kindTint)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(resource.kindTint.opacity(0.14))
-                        )
+                Spacer(minLength: 8)
 
-                    Spacer(minLength: 0)
-
-                    Text(resource.lastUsedLabel)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(QuietConsoleTheme.accent)
+                    .padding(.top, 2)
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(QuietConsoleTheme.secondaryFill)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -1597,6 +1819,10 @@ private struct GameDetailView: View {
         }
     }
 
+    private var visibleActiveTasks: [GameTask] {
+        showingAllActiveTasks ? pendingTasks : Array(pendingTasks.prefix(3))
+    }
+
     private var tasksListHeight: CGFloat {
         let rowHeight: CGFloat = 56
         return CGFloat(sortedTasks.count) * rowHeight
@@ -1604,6 +1830,44 @@ private struct GameDetailView: View {
 
     private var pendingTasks: [GameTask] {
         sortedTasks.filter { $0.isDone == false }
+    }
+
+    private var completedTasks: [GameTask] {
+        sortedTasks.filter { $0.isDone }
+    }
+
+    private var currentObjectiveText: String {
+        if let firstTask = pendingTasks.first {
+            return firstTask.text
+        }
+
+        if let latestNote {
+            let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty == false {
+                return trimmed
+            }
+            if latestNote.photoData != nil {
+                return "Photo checkpoint"
+            }
+        }
+
+        return "Review your last checkpoint"
+    }
+
+    private var hasSessionNotes: Bool {
+        latestNote != nil
+    }
+
+    private var lastSessionText: String {
+        guard let latestNote else {
+            return "No session notes yet."
+        }
+
+        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return latestNote.photoData == nil ? "No session notes yet." : "Photo checkpoint"
+        }
+        return trimmed
     }
 
     private var latestNoteText: String {
@@ -2253,6 +2517,25 @@ private extension String {
     }
 }
 
+private extension Game {
+    var stableAccentColor: Color {
+        let palette: [Color] = [
+            Color(red: 0.12, green: 0.47, blue: 0.43),
+            Color(red: 0.22, green: 0.38, blue: 0.74),
+            Color(red: 0.54, green: 0.31, blue: 0.68),
+            Color(red: 0.66, green: 0.24, blue: 0.28),
+            Color(red: 0.42, green: 0.45, blue: 0.18),
+            Color(red: 0.17, green: 0.48, blue: 0.63)
+        ]
+        let key = "\(id.uuidString)-\(title)"
+        let seed = key.unicodeScalars.reduce(0) { partial, scalar in
+            (partial &* 31) &+ Int(scalar.value)
+        }
+        let index = abs(seed) % palette.count
+        return palette[index]
+    }
+}
+
 private extension GameResource {
     var normalizedURL: URL? {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2267,6 +2550,13 @@ private extension GameResource {
             return trimmed
         }
         return normalizedURL?.host ?? urlString
+    }
+
+    var shortURLLabel: String {
+        guard let normalizedURL else { return urlString }
+        let host = normalizedURL.host ?? urlString
+        let path = normalizedURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return path.isEmpty ? host : "\(host)/\(path)"
     }
 
     var kindLabel: String {
