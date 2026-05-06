@@ -32,13 +32,33 @@ private struct LibraryView: View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if games.isEmpty {
-                    ContentUnavailableView(
-                        "No Games Yet",
-                        systemImage: "gamecontroller",
-                        description: Text("Add a game to keep momentum between sessions.")
-                    )
+                    VStack(spacing: 28) {
+                        LibraryHeaderView(
+                            gameCount: sortedGames.count,
+                            activeTaskCount: activeTaskCount,
+                            recentlyPlayedCount: recentlyPlayedCount
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+
+                        ContentUnavailableView(
+                            "No Games Yet",
+                            systemImage: "gamecontroller",
+                            description: Text("Add a game to keep momentum between sessions.")
+                        )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 } else {
                     List {
+                        LibraryHeaderView(
+                            gameCount: sortedGames.count,
+                            activeTaskCount: activeTaskCount,
+                            recentlyPlayedCount: recentlyPlayedCount
+                        )
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 14, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+
                         ForEach(sortedGames) { game in
                             gameRow(for: game)
                         }
@@ -49,9 +69,13 @@ private struct LibraryView: View {
                     .background(QuietConsoleTheme.canvas)
                 }
             }
-            .navigationTitle("Checkpoint")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .background(QuietConsoleTheme.canvas)
             .toolbar(content: toolbarContent)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                libraryAddGameBar
+            }
             .sheet(isPresented: $showingAddGame) {
                 AddEditGameView(mode: .add)
             }
@@ -193,15 +217,6 @@ private struct LibraryView: View {
         }
 
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                showingAddGame = true
-            } label: {
-                Label("Add Game", systemImage: "plus")
-            }
-            .accessibilityHint("Adds a game to your library")
-        }
-
-        ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Section("Help Improve CheckPoint") {
                     Button {
@@ -244,6 +259,23 @@ private struct LibraryView: View {
         }
     }
 
+    private var libraryAddGameBar: some View {
+        HStack {
+            Spacer()
+
+            Button {
+                showingAddGame = true
+            } label: {
+                AddGameFloatingButtonLabel()
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add Game")
+            .accessibilityHint("Adds a game to your library")
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 16)
+    }
+
     private func sendFeedback(kind: FeedbackKind) {
         guard let url = kind.mailURL else { return }
         openURL(url)
@@ -271,6 +303,20 @@ private struct LibraryView: View {
                 return lhs.createdAt > rhs.createdAt
             }
         }
+    }
+
+    private var activeTaskCount: Int {
+        games.reduce(0) { partial, game in
+            partial + game.tasks.filter { !$0.isDone }.count
+        }
+    }
+
+    private var recentlyPlayedCount: Int {
+        let calendar = Calendar.current
+        return games.filter { game in
+            guard let lastPlayedAt = game.lastPlayedAt else { return false }
+            return calendar.dateComponents([.day], from: lastPlayedAt, to: .now).day.map { $0 < 14 } ?? false
+        }.count
     }
 
     private func prepareBackupExport() {
@@ -502,14 +548,14 @@ private enum FeedbackKind {
     case general
     case feature
 
-    private static let emailAddress = "checkpoint.support@gmail.com"
+    private static let emailAddress = "thefreerangetester@gmail.com"
 
     var subject: String {
         switch self {
         case .general:
-            return "CheckPoint Feedback"
+            return "[Checkpoint] Feedback"
         case .feature:
-            return "CheckPoint Feature Request"
+            return "[Checkpoint] Feature Request"
         }
     }
 
@@ -519,7 +565,7 @@ private enum FeedbackKind {
             return """
             Hi,
 
-            I'd like to share some feedback about CheckPoint:
+            I'd like to share some feedback about Checkpoint:
 
 
 
@@ -531,7 +577,7 @@ private enum FeedbackKind {
             return """
             Hi,
 
-            I'd love to see this in CheckPoint:
+            I'd love to see this in Checkpoint:
 
 
 
@@ -554,6 +600,58 @@ private enum FeedbackKind {
             URLQueryItem(name: "body", value: body)
         ]
         return components.url
+    }
+}
+
+private struct LibraryHeaderView: View {
+    let gameCount: Int
+    let activeTaskCount: Int
+    let recentlyPlayedCount: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image("CheckpointLogo")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: QuietConsoleTheme.accent.opacity(0.25), radius: 10, x: 0, y: 5)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Checkpoint")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.primary)
+
+                Text(summary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var summary: String {
+        var parts = [gameCount == 1 ? "1 game" : "\(gameCount) games"]
+
+        if activeTaskCount > 0 {
+            parts.append(activeTaskCount == 1 ? "1 active task" : "\(activeTaskCount) active tasks")
+        }
+
+        if recentlyPlayedCount > 0 {
+            parts.append(recentlyPlayedCount == 1 ? "1 recent" : "\(recentlyPlayedCount) recent")
+        }
+
+        return parts.joined(separator: " / ")
     }
 }
 
@@ -666,79 +764,38 @@ private struct GameDetailHeaderView: View {
     let accentColor: Color
 
     var body: some View {
-        ZStack {
-            background
+        HStack(alignment: .center, spacing: 12) {
+            thumbnail
 
-            HStack(alignment: .center, spacing: 14) {
-                thumbnail
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.title3.weight(.bold))
+                    .fontDesign(.rounded)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(title)
-                        .font(.title2.weight(.bold))
-                        .fontDesign(.rounded)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
+                HStack(spacing: 8) {
+                    Text(lastPlayedLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(QuietConsoleTheme.activityText)
+                        .lineLimit(1)
 
-                    HStack(spacing: 8) {
-                        Text(lastPlayedLabel)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.92))
-
-                        Text(activeTaskLabel)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(.white.opacity(0.18))
-                            )
-                    }
+                    Text(activeTaskLabel)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(QuietConsoleTheme.activityText)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(QuietConsoleTheme.activityFill)
+                        )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 148)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private var background: some View {
-        if let coverImageData,
-           let image = UIImage(data: coverImageData) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .blur(radius: 14)
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.66),
-                            Color.black.opacity(0.48),
-                            accentColor.opacity(0.44)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .overlay(Color.black.opacity(0.12))
-                .clipped()
-        } else {
-            LinearGradient(
-                colors: [
-                    accentColor,
-                    accentColor.opacity(0.72),
-                    Color(uiColor: .systemGray).opacity(0.56)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        .padding(12)
+        .quietSurface(.primary, cornerRadius: 14)
     }
 
     @ViewBuilder
@@ -748,20 +805,20 @@ private struct GameDetailHeaderView: View {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(QuietConsoleTheme.cardBorder, lineWidth: 1)
                 )
         } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.white.opacity(0.16))
-                .frame(width: 72, height: 72)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(accentColor.opacity(0.16))
+                .frame(width: 54, height: 54)
                 .overlay {
                     Image(systemName: "gamecontroller.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(accentColor)
                 }
         }
     }
@@ -838,6 +895,34 @@ private struct FloatingAddButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add")
+    }
+}
+
+private struct AddGameFloatingButtonLabel: View {
+    var body: some View {
+        Label {
+            Text("Add Game")
+                .font(.headline.weight(.bold))
+        } icon: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "gamecontroller.fill")
+                    .font(.system(size: 16, weight: .bold))
+
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(QuietConsoleTheme.accent, .white)
+                    .offset(x: 6, y: 5)
+            }
+            .frame(width: 24, height: 22)
+        }
+        .foregroundStyle(.white)
+        .padding(.leading, 15)
+        .padding(.trailing, 18)
+        .frame(height: 58)
+        .background(Capsule(style: .continuous).fill(QuietConsoleTheme.accent))
+        .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+        .contentShape(Capsule(style: .continuous))
     }
 }
 
@@ -992,14 +1077,15 @@ private struct GameDetailView: View {
                     accentColor: game.stableAccentColor
                 )
 
+                currentObjectiveSection
+                lastSessionSection
+                activeTasksSection
+
                 ContinuePlayingButton(objective: currentObjectiveText) {
                     markGameResumed()
                     activeSheet = .resume
                 }
 
-                currentObjectiveSection
-                activeTasksSection
-                lastSessionSection
                 notesSection
                 resourcesSection
                 completedTasksSection
@@ -2316,9 +2402,9 @@ private struct AddEditGameView: View {
     @State private var coverImageData: Data?
     @State private var hasLoadedInitialValues = false
     @State private var rawgSuggestions: [RawgGameSuggestion] = []
-    @State private var isLoadingSuggestions = false
     @State private var selectedSuggestionID: Int?
-    @State private var rawgStatusMessage: String?
+    @State private var rawgSearchState: RawgSearchState = .idle
+    @FocusState private var isTitleFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -2327,18 +2413,10 @@ private struct AddEditGameView: View {
                     TextField("Title", text: $title)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled(true)
+                        .submitLabel(.done)
+                        .focused($isTitleFieldFocused)
 
-                    if isLoadingSuggestions {
-                        ProgressView("Searching RAWG...")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let rawgStatusMessage {
-                        Text(rawgStatusMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    rawgSearchStatusView
 
                     if rawgSuggestions.isEmpty == false {
                         VStack(alignment: .leading, spacing: 8) {
@@ -2400,7 +2478,10 @@ private struct AddEditGameView: View {
                         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .task { loadInitialValuesIfNeeded() }
+            .task {
+                loadInitialValuesIfNeeded()
+                focusTitleFieldIfAdding()
+            }
             .task(id: title) {
                 await fetchSuggestionsIfNeeded(for: title)
             }
@@ -2415,12 +2496,54 @@ private struct AddEditGameView: View {
         }
     }
 
+    @ViewBuilder
+    private var rawgSearchStatusView: some View {
+        switch rawgSearchState {
+        case .idle:
+            EmptyView()
+        case .waiting:
+            Text("Keep typing to search covers and metadata.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .searching:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Searching game matches...")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+        case .noResults(let query):
+            Text("No matches for \"\(query)\". You can still save it manually.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .missingAPIKey:
+            Text("Game lookup is unavailable right now. You can still add the game manually.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .failed:
+            Text("Couldn't search right now. You can still add the game manually.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func loadInitialValuesIfNeeded() {
         guard hasLoadedInitialValues == false else { return }
         hasLoadedInitialValues = true
         guard case .edit(let game) = mode else { return }
         title = game.title
         coverImageData = game.coverImageData
+    }
+
+    private func focusTitleFieldIfAdding() {
+        guard case .add = mode else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            isTitleFieldFocused = true
+        }
     }
 
     private func save() {
@@ -2448,7 +2571,7 @@ private struct AddEditGameView: View {
         selectedSuggestionID = suggestion.id
         title = suggestion.name
         rawgSuggestions = []
-        rawgStatusMessage = nil
+        rawgSearchState = .idle
 
         guard let coverURL = suggestion.coverURL else { return }
 
@@ -2460,41 +2583,78 @@ private struct AddEditGameView: View {
         }
     }
 
-    @MainActor
     private func fetchSuggestionsIfNeeded(for rawText: String) async {
         let query = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        selectedSuggestionID = nil
+        await MainActor.run {
+            selectedSuggestionID = nil
+        }
 
-        guard query.count >= 2 else {
-            rawgSuggestions = []
-            isLoadingSuggestions = false
-            rawgStatusMessage = nil
+        guard query.isEmpty == false else {
+            await MainActor.run {
+                rawgSuggestions = []
+                rawgSearchState = .idle
+            }
+            return
+        }
+
+        guard query.count >= 3 else {
+            await MainActor.run {
+                rawgSuggestions = []
+                rawgSearchState = .waiting
+            }
             return
         }
 
         guard RawgAPI.hasAPIKey else {
-            rawgSuggestions = []
-            isLoadingSuggestions = false
-            rawgStatusMessage = "RAWG API key is missing in app config."
+            await MainActor.run {
+                rawgSuggestions = []
+                rawgSearchState = .missingAPIKey
+            }
             return
         }
-
-        isLoadingSuggestions = true
-        defer { isLoadingSuggestions = false }
 
         do {
-            try await Task.sleep(nanoseconds: 300_000_000)
-            guard query == title.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-            rawgSuggestions = try await RawgAPI.searchGames(query: query)
-            rawgStatusMessage = rawgSuggestions.isEmpty ? "No matches found in RAWG." : nil
+            try await Task.sleep(nanoseconds: 550_000_000)
+            let queryAfterDebounce = await latestTitleQuery()
+            guard query == queryAfterDebounce else { return }
+
+            await MainActor.run {
+                rawgSuggestions = []
+                rawgSearchState = .searching(query)
+            }
+
+            let suggestions = try await RawgAPI.searchGames(query: query)
+            let queryAfterSearch = await latestTitleQuery()
+            guard query == queryAfterSearch else { return }
+
+            await MainActor.run {
+                rawgSuggestions = suggestions
+                rawgSearchState = suggestions.isEmpty ? .noResults(query) : .idle
+            }
         } catch is CancellationError {
-            // Ignore: this happens naturally while user keeps typing.
             return
         } catch {
-            rawgSuggestions = []
-            rawgStatusMessage = "Couldn't search games right now. Please try again."
+            await MainActor.run {
+                rawgSuggestions = []
+                rawgSearchState = .failed
+            }
         }
     }
+
+    private func latestTitleQuery() async -> String {
+        await MainActor.run {
+            title.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+}
+
+private enum RawgSearchState: Equatable {
+    case idle
+    case waiting
+    case searching(String)
+    case noResults(String)
+    case missingAPIKey
+    case failed
 }
 
 private enum QuietConsoleTheme {
