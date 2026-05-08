@@ -1060,11 +1060,17 @@ private struct GameDetailView: View {
     @State private var showingAddActions = false
     @State private var showingAllActiveTasks = false
     @State private var showingCompletedTasks = false
+    @State private var isWrappingUpSession = false
+    @State private var wrapUpNoteText = ""
+    @State private var wrapUpNextObjectiveText = ""
+    @State private var wrapUpPhotoItem: PhotosPickerItem?
+    @State private var wrapUpImageData: Data?
     @FocusState private var isQuickNoteFieldFocused: Bool
     @FocusState private var isQuickTaskFieldFocused: Bool
     @FocusState private var isEditTaskFieldFocused: Bool
     @FocusState private var isResourceURLFieldFocused: Bool
     @FocusState private var isEditNoteFieldFocused: Bool
+    @FocusState private var isWrapUpNoteFieldFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -1083,6 +1089,7 @@ private struct GameDetailView: View {
 
                 ContinuePlayingButton(objective: currentObjectiveText) {
                     markGameResumed()
+                    isWrappingUpSession = false
                     activeSheet = .resume
                 }
 
@@ -1223,169 +1230,37 @@ private struct GameDetailView: View {
     private var resumeSessionSheet: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .top, spacing: 14) {
-                        resumeCoverImage
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(game.title)
-                                .font(.title2.weight(.bold))
-                                .fontDesign(.rounded)
-                                .foregroundStyle(.primary)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(QuietConsoleTheme.activityText)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(QuietConsoleTheme.activityFill)
-                                )
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Current Objective")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        Text(currentObjectiveText)
-                            .font(.title3.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .quietSurface(.secondary, cornerRadius: 16)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Last Session")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        Text(lastSessionText)
-                            .font(.body)
-                            .foregroundStyle(hasSessionNotes ? .primary : .secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if let latestNotePreviewImage {
-                            Button {
-                                resumePreviewImageData = latestNote?.photoData
-                            } label: {
-                                Image(uiImage: latestNotePreviewImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 156)
-                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Open latest note photo")
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .quietSurface(.secondary, cornerRadius: 16)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Now")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
-                        if pendingTasks.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("You're clear")
-                                    .font(.headline)
-                                    .foregroundStyle(.secondary)
-                                Text("Jump in now, or drop a quick note first.")
-                                    .font(.body)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        } else {
-                            VStack(spacing: 10) {
-                                ForEach(pendingTasks.prefix(4)) { task in
-                                    Button {
-                                        toggleTask(task)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "circle")
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(QuietConsoleTheme.accent)
-                                            Text(task.text)
-                                                .font(.body.weight(.medium))
-                                                .foregroundStyle(.primary)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                        }
-                                        .padding(.vertical, 12)
-                                        .padding(.horizontal, 12)
-                                        .contentShape(Rectangle())
-                                        .quietSurface(.primary, cornerRadius: 12)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .quietSurface(.secondary, cornerRadius: 16)
-
-                    if sortedResources.isEmpty == false {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Resources")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.secondary)
-
-                            VStack(spacing: 10) {
-                                ForEach(sortedResources.prefix(4)) { resource in
-                                    Button {
-                                        open(resource)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "link")
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(QuietConsoleTheme.accent)
-
-                                            VStack(alignment: .leading, spacing: 3) {
-                                                Text(resource.displayTitle)
-                                                    .font(.body.weight(.medium))
-                                                    .foregroundStyle(.primary)
-                                                    .lineLimit(1)
-
-                                                Text(resource.urlString)
-                                                    .font(.footnote)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
-
-                                            Spacer(minLength: 8)
-
-                                            Image(systemName: "arrow.up.right")
-                                                .font(.footnote.weight(.semibold))
-                                                .foregroundStyle(.tertiary)
-                                        }
-                                        .padding(.vertical, 12)
-                                        .padding(.horizontal, 12)
-                                        .quietSurface(.primary, cornerRadius: 12)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                if isWrappingUpSession {
+                    wrapUpSessionContent
                         .padding(16)
-                        .quietSurface(.secondary, cornerRadius: 16)
-                    }
+                } else {
+                    resumeSessionContent
+                        .padding(16)
                 }
-                .padding(16)
             }
+            .navigationTitle(isWrappingUpSession ? "Wrap Up" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(isWrappingUpSession ? "Back" : "Close") {
+                        if isWrappingUpSession {
+                            isWrappingUpSession = false
+                        } else {
+                            activeSheet = nil
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        activeSheet = nil
+                    if isWrappingUpSession {
+                        Button("Save") {
+                            saveSessionWrapUp()
+                        }
+                        .disabled(canSaveSessionWrapUp == false)
+                    } else {
+                        Button("Wrap Up") {
+                            beginSessionWrapUp()
+                        }
                     }
                 }
             }
@@ -1397,6 +1272,251 @@ private struct GameDetailView: View {
                 imageData: resumePreviewImageData,
                 dismissAction: { resumePreviewImageData = nil }
             )
+        }
+        .onChange(of: wrapUpPhotoItem) { _, newItem in
+            Task {
+                let loadedData = try? await newItem?.loadTransferable(type: Data.self)
+                let optimizedData = optimizedNoteImageData(from: loadedData)
+                await MainActor.run {
+                    wrapUpImageData = optimizedData
+                }
+            }
+        }
+    }
+
+    private var resumeSessionContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 14) {
+                resumeCoverImage
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(game.title)
+                        .font(.title2.weight(.bold))
+                        .fontDesign(.rounded)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(QuietConsoleTheme.activityText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(QuietConsoleTheme.activityFill)
+                        )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Current Objective")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(currentObjectiveText)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .quietSurface(.secondary, cornerRadius: 16)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Last Session")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(lastSessionText)
+                    .font(.body)
+                    .foregroundStyle(hasSessionNotes ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let latestNotePreviewImage {
+                    Button {
+                        resumePreviewImageData = latestNote?.photoData
+                    } label: {
+                        Image(uiImage: latestNotePreviewImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 156)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open latest note photo")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .quietSurface(.secondary, cornerRadius: 16)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Now")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                if pendingTasks.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("You're clear")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        Text("Jump in now, or wrap up when you're done.")
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(pendingTasks.prefix(4)) { task in
+                            Button {
+                                toggleTask(task)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "circle")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(QuietConsoleTheme.accent)
+                                    Text(task.text)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .contentShape(Rectangle())
+                                .quietSurface(.primary, cornerRadius: 12)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .quietSurface(.secondary, cornerRadius: 16)
+
+            if sortedResources.isEmpty == false {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Resources")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 10) {
+                        ForEach(sortedResources.prefix(4)) { resource in
+                            Button {
+                                open(resource)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "link")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(QuietConsoleTheme.accent)
+
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(resource.displayTitle)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+
+                                        Text(resource.urlString)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+
+                                    Spacer(minLength: 8)
+
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .quietSurface(.primary, cornerRadius: 12)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .quietSurface(.secondary, cornerRadius: 16)
+            }
+        }
+    }
+
+    private var wrapUpSessionContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(game.title)
+                    .font(.title2.weight(.bold))
+                    .fontDesign(.rounded)
+                    .foregroundStyle(.primary)
+
+                Text("Leave future you a clean place to resume.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What changed?")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                TextEditor(text: $wrapUpNoteText)
+                    .frame(minHeight: 130)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(QuietConsoleTheme.primaryFill)
+                    )
+                    .focused($isWrapUpNoteFieldFocused)
+
+                PhotosPicker(selection: $wrapUpPhotoItem, matching: .images) {
+                    Label(wrapUpImageData == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                }
+
+                if let previewImage = notePreviewImage(from: wrapUpImageData) {
+                    noteComposerImagePreview(
+                        image: previewImage,
+                        removeAction: { wrapUpImageData = nil }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .quietSurface(.secondary, cornerRadius: 16)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Next objective")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                TextField("Where should you pick up next?", text: $wrapUpNextObjectiveText)
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        if canSaveSessionWrapUp {
+                            saveSessionWrapUp()
+                        }
+                    }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .quietSurface(.secondary, cornerRadius: 16)
+
+            Button {
+                finishSessionWithoutChanges()
+            } label: {
+                Text("No Changes")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(QuietConsoleTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(QuietConsoleTheme.activityFill)
+                    )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -1999,7 +2119,7 @@ private struct GameDetailView: View {
     private var sortedTasks: [GameTask] {
         game.tasks.sorted { lhs, rhs in
             if lhs.isDone != rhs.isDone { return lhs.isDone == false }
-            return lhs.createdAt < rhs.createdAt
+            return lhs.createdAt > rhs.createdAt
         }
     }
 
@@ -2075,6 +2195,12 @@ private struct GameDetailView: View {
         editingNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || editingNoteImageData != nil
     }
 
+    private var canSaveSessionWrapUp: Bool {
+        wrapUpNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            wrapUpNextObjectiveText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ||
+            wrapUpImageData != nil
+    }
+
     private var isShowingImagePreview: Binding<Bool> {
         Binding(
             get: { previewImageData != nil },
@@ -2122,6 +2248,49 @@ private struct GameDetailView: View {
         Haptics.success()
         saveContext()
         showSavedMessage("Task saved")
+        activeSheet = nil
+    }
+
+    private func beginSessionWrapUp() {
+        clearSessionWrapUpDraft()
+        withAnimation(.snappy(duration: 0.2)) {
+            isWrappingUpSession = true
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            isWrapUpNoteFieldFocused = true
+        }
+    }
+
+    private func saveSessionWrapUp() {
+        let noteText = wrapUpNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextObjective = wrapUpNextObjectiveText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard noteText.isEmpty == false || nextObjective.isEmpty == false || wrapUpImageData != nil else { return }
+
+        if noteText.isEmpty == false || wrapUpImageData != nil {
+            let note = GameNote(text: noteText, photoData: wrapUpImageData, game: game)
+            modelContext.insert(note)
+            game.notes.insert(note, at: 0)
+        }
+
+        if nextObjective.isEmpty == false {
+            let task = GameTask(text: nextObjective, isDone: false, game: game)
+            modelContext.insert(task)
+            game.tasks.append(task)
+        }
+
+        clearSessionWrapUpDraft()
+        isWrappingUpSession = false
+        Haptics.success()
+        saveContext()
+        showSavedMessage("Session wrapped")
+        activeSheet = nil
+    }
+
+    private func finishSessionWithoutChanges() {
+        clearSessionWrapUpDraft()
+        isWrappingUpSession = false
         activeSheet = nil
     }
 
@@ -2219,6 +2388,13 @@ private struct GameDetailView: View {
         quickNoteText = ""
         quickNotePhotoItem = nil
         quickNoteImageData = nil
+    }
+
+    private func clearSessionWrapUpDraft() {
+        wrapUpNoteText = ""
+        wrapUpNextObjectiveText = ""
+        wrapUpPhotoItem = nil
+        wrapUpImageData = nil
     }
 
     private func toggleTask(_ task: GameTask) {
