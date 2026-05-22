@@ -1418,11 +1418,15 @@ private struct GameDetailView: View {
                     .textCase(.uppercase)
                     .foregroundStyle(QuietConsoleTheme.accent)
 
-                Text(currentObjectiveText)
-                    .font(.title2.weight(.bold))
-                    .fontDesign(.rounded)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let currentPendingTask {
+                    resumeTaskRow(currentPendingTask, isPrimary: true)
+                } else {
+                    Text(currentObjectiveText)
+                        .font(.title2.weight(.bold))
+                        .fontDesign(.rounded)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             if pendingTasks.isEmpty {
@@ -1494,7 +1498,7 @@ private struct GameDetailView: View {
         )
     }
 
-    private func resumeTaskRow(_ task: GameTask) -> some View {
+    private func resumeTaskRow(_ task: GameTask, isPrimary: Bool = false) -> some View {
         Button {
             toggleTask(task)
         } label: {
@@ -1504,11 +1508,13 @@ private struct GameDetailView: View {
                     .foregroundStyle(QuietConsoleTheme.accent)
 
                 Text(task.text)
-                    .font(.body.weight(.medium))
+                    .font(isPrimary ? .title2.weight(.bold) : .body.weight(.medium))
+                    .fontDesign(isPrimary ? .rounded : .default)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.vertical, 11)
+            .padding(.vertical, isPrimary ? 13 : 11)
             .padding(.horizontal, 12)
             .contentShape(Rectangle())
             .background(
@@ -1517,6 +1523,7 @@ private struct GameDetailView: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Mark \(task.text) complete")
     }
 
     @ViewBuilder
@@ -2272,6 +2279,10 @@ private struct GameDetailView: View {
 
     private var pendingTasks: [GameTask] {
         sortedTasks.filter { $0.isDone == false }
+    }
+
+    private var currentPendingTask: GameTask? {
+        pendingTasks.first
     }
 
     private var completedTasks: [GameTask] {
