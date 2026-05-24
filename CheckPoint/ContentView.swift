@@ -8,6 +8,7 @@ struct ContentView: View {
     var body: some View {
         LibraryView()
             .tint(QuietConsoleTheme.accent)
+            .preferredColorScheme(.dark)
     }
 }
 
@@ -66,12 +67,12 @@ private struct LibraryView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .background(QuietConsoleTheme.canvas)
+                    .background(ConsoleBackdrop())
                 }
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .background(QuietConsoleTheme.canvas)
+            .background(ConsoleBackdrop())
             .toolbar(content: toolbarContent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 libraryAddGameBar
@@ -623,12 +624,16 @@ private struct LibraryHeaderView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Checkpoint")
-                    .font(.title2.weight(.bold))
+                    .font(.largeTitle.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
                     .foregroundStyle(.primary)
 
                 Text(summary)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
+                    .foregroundStyle(QuietConsoleTheme.accent)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -664,23 +669,26 @@ private struct GameRowView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(game.title)
-                    .font(.headline.weight(.semibold))
-                    .fontDesign(.rounded)
+                    .font(.headline.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
                     Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(QuietConsoleTheme.subtleText)
 
                     Text(activeTaskLabel)
                         .font(.caption.weight(.semibold))
+                        .fontWidth(.condensed)
+                        .textCase(.uppercase)
                         .foregroundStyle(game.stableAccentColor)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(
-                            Capsule(style: .continuous)
+                            GamerPanelShape(cut: 7)
                                 .fill(game.stableAccentColor.opacity(0.14))
                         )
                 }
@@ -696,16 +704,22 @@ private struct GameRowView: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(QuietConsoleTheme.primaryFill)
+            GamerPanelShape(cut: 16)
+                .fill(QuietConsoleTheme.panelGradient)
+        }
+        .overlay {
+            GamerPanelShape(cut: 16)
+                .strokeBorder(game.stableAccentColor.opacity(0.42), lineWidth: 1)
         }
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
+            ParallelogramShape(slant: 12)
                 .fill(game.stableAccentColor)
-                .frame(width: 3)
-                .padding(.vertical, 12)
+                .frame(width: 7)
+                .padding(.vertical, 8)
+                .offset(x: -2)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: game.stableAccentColor.opacity(0.16), radius: 12, x: 0, y: 6)
+        .contentShape(GamerPanelShape(cut: 16))
     }
 
     @ViewBuilder
@@ -769,8 +783,9 @@ private struct GameDetailHeaderView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.title3.weight(.bold))
-                    .fontDesign(.rounded)
+                    .font(.title.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
@@ -795,7 +810,7 @@ private struct GameDetailHeaderView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .quietSurface(.primary, cornerRadius: 14)
+        .quietSurface(.primary, cornerRadius: 18)
     }
 
     @ViewBuilder
@@ -834,16 +849,22 @@ private struct ContinuePlayingButton: View {
     var body: some View {
         Button(action: action) {
             Label("CONTINUE PLAYING", systemImage: "play.fill")
-                .font(.headline.weight(.bold))
+                .font(.headline.weight(.black))
+                .fontWidth(.condensed)
                 .labelStyle(.titleAndIcon)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
             .padding(.horizontal, 18)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(QuietConsoleTheme.accent)
+                GamerPanelShape(cut: 18)
+                    .fill(QuietConsoleTheme.actionGradient)
             )
+            .overlay {
+                GamerPanelShape(cut: 18)
+                    .strokeBorder(QuietConsoleTheme.hotAccent.opacity(0.82), lineWidth: 1.4)
+            }
+            .shadow(color: QuietConsoleTheme.hotAccent.opacity(0.38), radius: 16, x: 0, y: 8)
         }
         .buttonStyle(.plain)
     }
@@ -875,14 +896,16 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Text("Next up")
-                        .font(.footnote.weight(.bold))
+                        .font(.footnote.weight(.black))
+                        .fontWidth(.condensed)
                         .textCase(.uppercase)
                         .foregroundStyle(QuietConsoleTheme.accent)
                 }
 
                 Text(objective)
-                    .font(.title2.weight(.bold))
-                    .fontDesign(.rounded)
+                    .font(.title.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -898,20 +921,21 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(QuietConsoleTheme.primaryFill)
+            GamerPanelShape(cut: 24)
+                .fill(QuietConsoleTheme.deepPanelGradient)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            GamerPanelShape(cut: 24)
+                .strokeBorder(QuietConsoleTheme.hotAccent.opacity(0.58), lineWidth: 1.25)
         )
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(QuietConsoleTheme.accent)
-                .frame(width: 4)
+            ParallelogramShape(slant: 16)
+                .fill(QuietConsoleTheme.hotAccent)
+                .frame(width: 7)
                 .padding(.vertical, 18)
+                .offset(x: -3)
         }
-        .shadow(color: QuietConsoleTheme.cardShadow.opacity(0.5), radius: 10, x: 0, y: 4)
+        .shadow(color: QuietConsoleTheme.hotAccent.opacity(0.20), radius: 18, x: 0, y: 8)
     }
 
 }
@@ -928,8 +952,10 @@ private struct SessionMemoryLine: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Last time")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
+                    .foregroundStyle(QuietConsoleTheme.accent)
 
                 Text(text)
                     .font(.subheadline)
@@ -941,9 +967,13 @@ private struct SessionMemoryLine: View {
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            GamerPanelShape(cut: 12)
                 .fill(QuietConsoleTheme.secondaryFill)
         )
+        .overlay {
+            GamerPanelShape(cut: 12)
+                .strokeBorder(QuietConsoleTheme.accent.opacity(0.2), lineWidth: 1)
+        }
     }
 }
 
@@ -959,8 +989,10 @@ private struct DetailSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.headline.weight(.black))
+                .fontWidth(.condensed)
+                .textCase(.uppercase)
+                .foregroundStyle(QuietConsoleTheme.accent)
 
             content
         }
@@ -979,8 +1011,12 @@ private struct FloatingAddButton: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 58, height: 58)
-                .background(Circle().fill(QuietConsoleTheme.accent))
-                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
+                .background(GamerPanelShape(cut: 14).fill(QuietConsoleTheme.actionGradient))
+                .overlay {
+                    GamerPanelShape(cut: 14)
+                        .strokeBorder(QuietConsoleTheme.hotAccent.opacity(0.85), lineWidth: 1.25)
+                }
+                .shadow(color: QuietConsoleTheme.hotAccent.opacity(0.35), radius: 14, x: 0, y: 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add")
@@ -991,7 +1027,9 @@ private struct AddGameFloatingButtonLabel: View {
     var body: some View {
         Label {
             Text("Add Game")
-                .font(.headline.weight(.bold))
+                .font(.headline.weight(.black))
+                .fontWidth(.condensed)
+                .textCase(.uppercase)
         } icon: {
             ZStack(alignment: .bottomTrailing) {
                 Image(systemName: "gamecontroller.fill")
@@ -1009,9 +1047,13 @@ private struct AddGameFloatingButtonLabel: View {
         .padding(.leading, 15)
         .padding(.trailing, 18)
         .frame(height: 58)
-        .background(Capsule(style: .continuous).fill(QuietConsoleTheme.accent))
-        .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
-        .contentShape(Capsule(style: .continuous))
+        .background(GamerPanelShape(cut: 18).fill(QuietConsoleTheme.actionGradient))
+        .overlay {
+            GamerPanelShape(cut: 18)
+                .strokeBorder(QuietConsoleTheme.accent.opacity(0.8), lineWidth: 1.2)
+        }
+        .shadow(color: QuietConsoleTheme.accent.opacity(0.32), radius: 14, x: 0, y: 6)
+        .contentShape(GamerPanelShape(cut: 18))
     }
 }
 
@@ -1021,14 +1063,20 @@ private struct FloatingBackButton: View {
     var body: some View {
         Button(action: action) {
             Label("Games", systemImage: "chevron.left")
-                .font(.headline.weight(.bold))
+                .font(.headline.weight(.black))
+                .fontWidth(.condensed)
+                .textCase(.uppercase)
                 .foregroundStyle(.white)
                 .padding(.leading, 15)
                 .padding(.trailing, 18)
                 .frame(height: 58)
-                .background(Capsule(style: .continuous).fill(QuietConsoleTheme.accent))
-                .shadow(color: Color.black.opacity(0.22), radius: 12, x: 0, y: 6)
-                .contentShape(Capsule(style: .continuous))
+                .background(GamerPanelShape(cut: 18).fill(QuietConsoleTheme.actionGradient))
+                .overlay {
+                    GamerPanelShape(cut: 18)
+                        .strokeBorder(QuietConsoleTheme.accent.opacity(0.82), lineWidth: 1.2)
+                }
+                .shadow(color: QuietConsoleTheme.accent.opacity(0.32), radius: 14, x: 0, y: 6)
+                .contentShape(GamerPanelShape(cut: 18))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Games")
@@ -1183,7 +1231,7 @@ private struct GameDetailView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
-        .background(QuietConsoleTheme.canvas)
+        .background(ConsoleBackdrop())
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 10) {
                 if let savedMessage {
@@ -1381,8 +1429,9 @@ private struct GameDetailView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(game.title)
-                    .font(.title2.weight(.bold))
-                    .fontDesign(.rounded)
+                    .font(.title.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -1414,7 +1463,8 @@ private struct GameDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Next up")
-                    .font(.footnote.weight(.bold))
+                    .font(.footnote.weight(.black))
+                    .fontWidth(.condensed)
                     .textCase(.uppercase)
                     .foregroundStyle(QuietConsoleTheme.accent)
 
@@ -1422,8 +1472,9 @@ private struct GameDetailView: View {
                     resumeTaskRow(currentPendingTask, isPrimary: true)
                 } else {
                     Text(currentObjectiveText)
-                        .font(.title2.weight(.bold))
-                        .fontDesign(.rounded)
+                        .font(.title.weight(.black))
+                        .fontWidth(.condensed)
+                        .textCase(.uppercase)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1489,12 +1540,12 @@ private struct GameDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(QuietConsoleTheme.primaryFill)
+            GamerPanelShape(cut: 24)
+                .fill(QuietConsoleTheme.deepPanelGradient)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            GamerPanelShape(cut: 24)
+                .strokeBorder(QuietConsoleTheme.accent.opacity(0.45), lineWidth: 1.2)
         )
     }
 
@@ -2982,12 +3033,83 @@ private enum RawgSearchState: Equatable {
     case failed
 }
 
+private struct GamerPanelShape: InsettableShape {
+    var cut: CGFloat = 18
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let c = min(cut, min(rect.width, rect.height) / 3)
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        var path = Path()
+        path.move(to: CGPoint(x: r.minX + c, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX - c * 0.45, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.minY + c * 0.55))
+        path.addLine(to: CGPoint(x: r.maxX - c, y: r.maxY))
+        path.addLine(to: CGPoint(x: r.minX + c * 0.35, y: r.maxY))
+        path.addLine(to: CGPoint(x: r.minX, y: r.maxY - c * 0.8))
+        path.addLine(to: CGPoint(x: r.minX, y: r.minY + c * 0.55))
+        path.closeSubpath()
+        return path
+    }
+
+    func inset(by amount: CGFloat) -> some InsettableShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
+    }
+}
+
+private struct ParallelogramShape: Shape {
+    var slant: CGFloat = 14
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + slant, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - slant, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct ConsoleBackdrop: View {
+    var body: some View {
+        QuietConsoleTheme.canvas
+            .ignoresSafeArea()
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        QuietConsoleTheme.accent.opacity(0.14),
+                        Color.clear,
+                        QuietConsoleTheme.hotAccent.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+            .overlay(alignment: .topTrailing) {
+                ParallelogramShape(slant: 48)
+                    .stroke(QuietConsoleTheme.accent.opacity(0.08), lineWidth: 1)
+                    .frame(width: 220, height: 120)
+                    .rotationEffect(.degrees(-10))
+                    .offset(x: 72, y: 20)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Text("CHECKPOINT")
+                    .font(.system(size: 78, weight: .black))
+                    .fontWidth(.condensed)
+                    .foregroundStyle(.white.opacity(0.025))
+                    .rotationEffect(.degrees(-13))
+                    .offset(x: 58, y: -26)
+            }
+    }
+}
+
 private enum QuietConsoleTheme {
-    static let accent = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.39, green: 0.77, blue: 0.71, alpha: 1)
-            : UIColor(red: 0.12, green: 0.47, blue: 0.43, alpha: 1)
-    })
+    static let accent = Color(red: 0.08, green: 0.93, blue: 0.82)
+    static let hotAccent = Color(red: 1.00, green: 0.07, blue: 0.31)
+    static let violetAccent = Color(red: 0.58, green: 0.25, blue: 1.00)
 
     static let secondaryAction = Color(uiColor: UIColor { trait in
         trait.userInterfaceStyle == .dark
@@ -2995,15 +3117,40 @@ private enum QuietConsoleTheme {
             : UIColor(red: 0.80, green: 0.84, blue: 0.88, alpha: 1)
     })
 
-    static let canvas = Color(uiColor: .systemGroupedBackground)
-    static let primaryFill = Color(uiColor: .secondarySystemGroupedBackground)
-    static let secondaryFill = Color(uiColor: .tertiarySystemGroupedBackground)
-    static let elevatedFill = Color(uiColor: .secondarySystemBackground)
-    static let subtleText = Color(uiColor: .secondaryLabel)
-    static let cardBorder = Color.primary.opacity(0.08)
-    static let cardShadow = Color.black.opacity(0.12)
+    static let canvas = Color(red: 0.015, green: 0.032, blue: 0.055)
+    static let primaryFill = Color(red: 0.035, green: 0.075, blue: 0.105).opacity(0.92)
+    static let secondaryFill = Color(red: 0.025, green: 0.105, blue: 0.125).opacity(0.78)
+    static let elevatedFill = Color(red: 0.045, green: 0.095, blue: 0.135).opacity(0.96)
+    static let subtleText = Color.white.opacity(0.68)
+    static let cardBorder = accent.opacity(0.28)
+    static let cardShadow = Color.black.opacity(0.54)
     static let activityFill = accent.opacity(0.16)
     static let activityText = accent
+    static let panelGradient = LinearGradient(
+        colors: [
+            Color(red: 0.045, green: 0.085, blue: 0.125).opacity(0.96),
+            Color(red: 0.015, green: 0.025, blue: 0.05).opacity(0.92)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let deepPanelGradient = LinearGradient(
+        colors: [
+            hotAccent.opacity(0.18),
+            Color(red: 0.045, green: 0.075, blue: 0.105).opacity(0.96),
+            Color(red: 0.012, green: 0.018, blue: 0.04).opacity(0.96)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let actionGradient = LinearGradient(
+        colors: [
+            hotAccent,
+            Color(red: 0.88, green: 0.04, blue: 0.26)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 }
 
 private enum QuietSurfaceStyle {
@@ -3052,13 +3199,14 @@ private struct QuietSurfaceModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                GamerPanelShape(cut: min(24, max(12, cornerRadius + 4)))
                     .fill(style.fill)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(style.borderOpacity), lineWidth: 1)
+                GamerPanelShape(cut: min(24, max(12, cornerRadius + 4)))
+                    .strokeBorder(QuietConsoleTheme.accent.opacity(style.borderOpacity), lineWidth: 1)
             )
+            .shadow(color: QuietConsoleTheme.accent.opacity(style == .secondary ? 0.10 : 0.18), radius: style.shadowRadius, x: 0, y: 3)
             .shadow(color: QuietConsoleTheme.cardShadow.opacity(style == .secondary ? 0.35 : 0.55), radius: style.shadowRadius, x: 0, y: 3)
     }
 }
@@ -3096,12 +3244,12 @@ private extension String {
 private extension Game {
     var stableAccentColor: Color {
         let palette: [Color] = [
-            Color(red: 0.12, green: 0.47, blue: 0.43),
-            Color(red: 0.22, green: 0.38, blue: 0.74),
-            Color(red: 0.54, green: 0.31, blue: 0.68),
-            Color(red: 0.66, green: 0.24, blue: 0.28),
-            Color(red: 0.42, green: 0.45, blue: 0.18),
-            Color(red: 0.17, green: 0.48, blue: 0.63)
+            QuietConsoleTheme.accent,
+            Color(red: 0.18, green: 0.58, blue: 1.00),
+            QuietConsoleTheme.violetAccent,
+            QuietConsoleTheme.hotAccent,
+            Color(red: 0.10, green: 0.92, blue: 0.46),
+            Color(red: 0.95, green: 0.72, blue: 0.12)
         ]
         let key = "\(id.uuidString)-\(title)"
         let seed = key.unicodeScalars.reduce(0) { partial, scalar in

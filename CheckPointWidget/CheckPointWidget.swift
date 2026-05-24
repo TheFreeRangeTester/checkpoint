@@ -2,6 +2,32 @@ import SwiftUI
 import UIKit
 import WidgetKit
 
+private struct GamerPanelShape: InsettableShape {
+    var cut: CGFloat = 16
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let c = min(cut, min(rect.width, rect.height) / 3)
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        var path = Path()
+        path.move(to: CGPoint(x: r.minX + c, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX - c * 0.45, y: r.minY))
+        path.addLine(to: CGPoint(x: r.maxX, y: r.minY + c * 0.55))
+        path.addLine(to: CGPoint(x: r.maxX - c, y: r.maxY))
+        path.addLine(to: CGPoint(x: r.minX + c * 0.35, y: r.maxY))
+        path.addLine(to: CGPoint(x: r.minX, y: r.maxY - c * 0.8))
+        path.addLine(to: CGPoint(x: r.minX, y: r.minY + c * 0.55))
+        path.closeSubpath()
+        return path
+    }
+
+    func inset(by amount: CGFloat) -> some InsettableShape {
+        var shape = self
+        shape.insetAmount += amount
+        return shape
+    }
+}
+
 struct CheckPointResumeEntry: TimelineEntry {
     let date: Date
     let snapshot: CheckpointWidgetSnapshot
@@ -127,31 +153,51 @@ private struct CheckPointResumeWidgetView: View {
     private var smallBody: some View {
         Group {
             if let featuredGame = entry.snapshot.featuredGame {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        coverThumbnail(for: featuredGame, size: 42)
 
-                    VStack(alignment: .center, spacing: 10) {
-                        Text(CheckpointActivityFormatter.lastActivityLabel(for: featuredGame.lastPlayedAt))
-                            .font(.title3.weight(.black))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.82)
-                            .multilineTextAlignment(.center)
-                            .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 4)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("NEXT LOAD")
+                                .font(.caption2.weight(.black))
+                                .fontWidth(.condensed)
+                                .foregroundStyle(widgetAccent)
+                                .lineLimit(1)
 
-                        statusPill(
-                            title: featuredGame.pendingTasksCount == 1 ? "1 task pending" : "\(featuredGame.pendingTasksCount) tasks pending",
-                            systemImage: "checklist"
-                        )
+                            Text(featuredGame.title)
+                                .font(.caption.weight(.black))
+                                .fontWidth(.condensed)
+                                .foregroundStyle(.white)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.7)
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 10)
 
                     Spacer(minLength: 0)
+
+                    Text(CheckpointActivityFormatter.compactLastActivityLabel(for: featuredGame.lastPlayedAt))
+                        .font(.title3.weight(.black))
+                        .fontWidth(.condensed)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    statusPill(
+                        title: featuredGame.pendingTasksCount == 1 ? "1 TASK" : "\(featuredGame.pendingTasksCount) TASKS",
+                        systemImage: "scope"
+                    )
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 18)
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(
+                    GamerPanelShape(cut: 22)
+                        .fill(contentPanelGradient)
+                )
+                .overlay {
+                    GamerPanelShape(cut: 22)
+                        .strokeBorder(widgetAccent.opacity(0.55), lineWidth: 1.2)
+                }
+                .shadow(color: widgetAccent.opacity(0.24), radius: 14, x: 0, y: 6)
+                .padding(10)
             } else {
                 emptyState
             }
@@ -161,35 +207,36 @@ private struct CheckPointResumeWidgetView: View {
     private var mediumBody: some View {
         Group {
             if let featuredGame = entry.snapshot.featuredGame {
-                ZStack {
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(alignment: .top, spacing: 10) {
-                            coverThumbnail(for: featuredGame, size: 56)
+                HStack(alignment: .center, spacing: 12) {
+                    coverThumbnail(for: featuredGame, size: 64)
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(featuredGame.title)
-                                    .font(.title3.weight(.black))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.75)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
-
-                                Text(CheckpointActivityFormatter.lastActivityLabel(for: featuredGame.lastPlayedAt))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(widgetAccent.opacity(0.92))
-                                    .lineLimit(1)
-
-                                compactTasksBadge(pendingCount: featuredGame.pendingTasksCount)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(spacing: 7) {
+                            Text("RESUME")
+                                .font(.caption2.weight(.black))
+                                .fontWidth(.condensed)
+                                .foregroundStyle(widgetAccent)
+                            compactTasksBadge(pendingCount: featuredGame.pendingTasksCount)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 78, maxHeight: 78, alignment: .topLeading)
+
+                        Text(featuredGame.title)
+                            .font(.title3.weight(.black))
+                            .fontWidth(.condensed)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                            .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 4)
+
+                        Text(CheckpointActivityFormatter.lastActivityLabel(for: featuredGame.lastPlayedAt))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(widgetAccent.opacity(0.95))
+                            .lineLimit(1)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(CheckpointResumeCopy.latestNotePrefix.uppercased())
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(widgetAccent.opacity(0.88))
+                            Text("LAST SESSION")
+                                .font(.caption2.weight(.black))
+                                .fontWidth(.condensed)
+                                .foregroundStyle(Color.white.opacity(0.62))
 
                             Text(featuredGame.latestNote ?? CheckpointResumeCopy.latestNoteFallback)
                                 .font(.footnote.weight(.medium))
@@ -197,30 +244,26 @@ private struct CheckPointResumeWidgetView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 46, maxHeight: 46, alignment: .topLeading)
-                        .padding(.top, 6)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                    .frame(maxWidth: .infinity, minHeight: 142, maxHeight: 142, alignment: .topLeading)
-                    .background(contentPanelBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(widgetAccent.opacity(0.34), lineWidth: 1.5)
-                    }
-                    .overlay(alignment: .topLeading) {
-                        Capsule(style: .continuous)
-                            .fill(widgetAccent)
-                            .frame(width: 72, height: 5)
-                            .padding(.top, 1)
-                            .padding(.leading, 14)
-                    }
-                    .shadow(color: .black.opacity(0.26), radius: 18, x: 0, y: 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                .padding(.horizontal, 18)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .background(GamerPanelShape(cut: 24).fill(contentPanelGradient))
+                .overlay {
+                    GamerPanelShape(cut: 24)
+                        .strokeBorder(widgetAccent.opacity(0.48), lineWidth: 1.35)
+                }
+                .overlay(alignment: .topLeading) {
+                    Capsule(style: .continuous)
+                        .fill(widgetAccent)
+                        .frame(width: 74, height: 5)
+                        .padding(.top, 2)
+                        .padding(.leading, 18)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 12)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             } else {
                 emptyState
@@ -254,10 +297,9 @@ private struct CheckPointResumeWidgetView: View {
                 .padding(.top, 22)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .background(contentPanelBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .background(GamerPanelShape(cut: 28).fill(contentPanelGradient))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    GamerPanelShape(cut: 28)
                         .strokeBorder(widgetAccent.opacity(0.28), lineWidth: 1.5)
                 }
                 .overlay(alignment: .topLeading) {
@@ -342,11 +384,11 @@ private struct CheckPointResumeWidgetView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 54, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            GamerPanelShape(cut: 12)
                 .fill(Color.black.opacity(0.20))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            GamerPanelShape(cut: 12)
                 .strokeBorder(widgetAccent.opacity(0.16), lineWidth: 1)
         }
     }
@@ -428,10 +470,10 @@ private struct CheckPointResumeWidgetView: View {
 
                 RadialGradient(
                     colors: [
-                        Color.clear,
-                        Color.black.opacity(0.18)
+                        urgentAccent.opacity(0.24),
+                        Color.clear
                     ],
-                    center: .topTrailing,
+                    center: .bottomTrailing,
                     startRadius: 12,
                     endRadius: family == .systemMedium ? 220 : 140
                 )
@@ -445,8 +487,8 @@ private struct CheckPointResumeWidgetView: View {
         LinearGradient(
             colors: [
                 Color(red: 0.06, green: 0.16, blue: 0.14),
-                Color(red: 0.05, green: 0.08, blue: 0.11),
-                Color(red: 0.02, green: 0.03, blue: 0.05)
+                Color(red: 0.04, green: 0.07, blue: 0.11),
+                Color(red: 0.02, green: 0.02, blue: 0.05)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -458,7 +500,8 @@ private struct CheckPointResumeWidgetView: View {
                         LinearGradient(
                             colors: [
                                 widgetAccent.opacity(0.18),
-                                Color.clear
+                                Color.clear,
+                                urgentAccent.opacity(0.16)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -480,21 +523,26 @@ private struct CheckPointResumeWidgetView: View {
 
     private var contentPanelBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            GamerPanelShape(cut: 22)
                 .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.60),
-                            Color.black.opacity(0.46)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                    contentPanelGradient
                 )
 
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            GamerPanelShape(cut: 22)
                 .fill(widgetAccent.opacity(0.04))
         }
+    }
+
+    private var contentPanelGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                widgetAccent.opacity(0.18),
+                Color.black.opacity(0.64),
+                urgentAccent.opacity(0.12)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     private func statusPill(title: String, systemImage: String) -> some View {
@@ -522,13 +570,13 @@ private struct CheckPointResumeWidgetView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .clipShape(GamerPanelShape(cut: size * 0.20))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    GamerPanelShape(cut: size * 0.20)
                         .strokeBorder(widgetAccent.opacity(0.72), lineWidth: 1.5)
                 }
         } else {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            GamerPanelShape(cut: size * 0.20)
                 .fill(Color.white.opacity(0.12))
                 .frame(width: size, height: size)
                 .overlay {
@@ -540,6 +588,10 @@ private struct CheckPointResumeWidgetView: View {
     }
 
     private var widgetAccent: Color {
-        Color(red: 0.42, green: 0.87, blue: 0.78)
+        Color(red: 0.08, green: 0.93, blue: 0.82)
+    }
+
+    private var urgentAccent: Color {
+        Color(red: 1.00, green: 0.07, blue: 0.31)
     }
 }
