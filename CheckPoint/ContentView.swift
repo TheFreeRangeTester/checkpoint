@@ -2311,7 +2311,10 @@ private struct GameDetailView: View {
     private var sortedTasks: [GameTask] {
         game.tasks.sorted { lhs, rhs in
             if lhs.isDone != rhs.isDone { return lhs.isDone == false }
-            return lhs.createdAt > rhs.createdAt
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.isDone ? lhs.createdAt > rhs.createdAt : lhs.createdAt < rhs.createdAt
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 
