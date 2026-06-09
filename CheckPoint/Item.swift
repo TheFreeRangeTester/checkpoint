@@ -1,6 +1,11 @@
 import Foundation
 import SwiftData
 
+enum GameNoteKind: String, Codable {
+    case note
+    case sessionWrapUp
+}
+
 @Model
 final class Game {
     var id: UUID
@@ -45,19 +50,34 @@ final class GameNote {
     var createdAt: Date
     var text: String
     var photoData: Data?
+    var kindRawValue: String?
+    var pinnedAt: Date?
     var game: Game?
+
+    var kind: GameNoteKind {
+        get { kindRawValue.flatMap(GameNoteKind.init(rawValue:)) ?? .note }
+        set { kindRawValue = newValue.rawValue }
+    }
+
+    var isPinned: Bool {
+        pinnedAt != nil
+    }
 
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
         text: String,
         photoData: Data? = nil,
+        kind: GameNoteKind = .note,
+        pinnedAt: Date? = nil,
         game: Game? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
         self.text = text
         self.photoData = photoData
+        self.kindRawValue = kind.rawValue
+        self.pinnedAt = pinnedAt
         self.game = game
     }
 }

@@ -417,6 +417,8 @@ private struct LibraryView: View {
                 createdAt: noteSnapshot.createdAt,
                 text: noteSnapshot.text,
                 photoData: noteSnapshot.photoData,
+                kind: noteSnapshot.kind,
+                pinnedAt: noteSnapshot.pinnedAt,
                 game: game
             )
             modelContext.insert(note)
@@ -463,12 +465,16 @@ private struct LibraryView: View {
                 note.createdAt = noteSnapshot.createdAt
                 note.text = noteSnapshot.text
                 note.photoData = noteSnapshot.photoData
+                note.kind = noteSnapshot.kind
+                note.pinnedAt = noteSnapshot.pinnedAt
             } else {
                 let note = GameNote(
                     id: noteSnapshot.id,
                     createdAt: noteSnapshot.createdAt,
                     text: noteSnapshot.text,
                     photoData: noteSnapshot.photoData,
+                    kind: noteSnapshot.kind,
+                    pinnedAt: noteSnapshot.pinnedAt,
                     game: game
                 )
                 modelContext.insert(note)
@@ -760,7 +766,10 @@ private struct GameRowView: View {
             return task.text
         }
 
-        if let latestNote = game.notes.sorted(by: { $0.createdAt > $1.createdAt }).first {
+        if let latestNote = game.notes
+            .filter({ $0.kind == .sessionWrapUp })
+            .sorted(by: { $0.createdAt > $1.createdAt })
+            .first {
             let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty == false { return trimmed }
             if latestNote.photoData != nil { return "Photo checkpoint" }
@@ -874,6 +883,7 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
     let objective: String
     let lastSession: String
     let hasSessionNotes: Bool
+    let pinnedNotes: [String]
     let continueAction: () -> Void
     let taskContent: TaskContent
 
@@ -881,12 +891,14 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
         objective: String,
         lastSession: String,
         hasSessionNotes: Bool,
+        pinnedNotes: [String],
         continueAction: @escaping () -> Void,
         @ViewBuilder taskContent: () -> TaskContent
     ) {
         self.objective = objective
         self.lastSession = lastSession
         self.hasSessionNotes = hasSessionNotes
+        self.pinnedNotes = pinnedNotes
         self.continueAction = continueAction
         self.taskContent = taskContent()
     }
@@ -914,6 +926,10 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
                 SessionMemoryLine(text: lastSession)
             }
 
+            if pinnedNotes.isEmpty == false {
+                PinnedNotesPanel(notes: pinnedNotes)
+            }
+
             ContinuePlayingButton(action: continueAction)
 
             taskContent
@@ -938,6 +954,38 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
         .shadow(color: QuietConsoleTheme.hotAccent.opacity(0.20), radius: 18, x: 0, y: 8)
     }
 
+}
+
+private struct PinnedNotesPanel: View {
+    let notes: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Pinned", systemImage: "pin.fill")
+                .font(.caption.weight(.black))
+                .fontWidth(.condensed)
+                .textCase(.uppercase)
+                .foregroundStyle(QuietConsoleTheme.accent)
+
+            ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
+                Text(note)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            GamerPanelShape(cut: 12)
+                .fill(QuietConsoleTheme.secondaryFill)
+        )
+        .overlay {
+            GamerPanelShape(cut: 12)
+                .strokeBorder(QuietConsoleTheme.accent.opacity(0.2), lineWidth: 1)
+        }
+    }
 }
 
 private struct SessionMemoryLine: View {
@@ -1522,11 +1570,11 @@ private struct GameDetailView: View {
                 SessionMemoryLine(text: lastSessionText)
             }
 
-            if let latestNotePreviewImage {
+            if let latestSessionNotePreviewImage {
                 Button {
-                    resumePreviewImageData = latestNote?.photoData
+                    resumePreviewImageData = latestSessionNote?.photoData
                 } label: {
-                    Image(uiImage: latestNotePreviewImage)
+                    Image(uiImage: latestSessionNotePreviewImage)
                         .resizable()
                         .scaledToFill()
                         .frame(maxWidth: .infinity)
@@ -1535,6 +1583,10 @@ private struct GameDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open latest note photo")
+            }
+
+            if pinnedNoteTexts.isEmpty == false {
+                PinnedNotesPanel(notes: pinnedNoteTexts)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1737,6 +1789,7 @@ private struct GameDetailView: View {
             objective: currentObjectiveText,
             lastSession: lastSessionText,
             hasSessionNotes: hasSessionNotes,
+            pinnedNotes: pinnedNoteTexts,
             continueAction: {
                 markGameResumed()
                 isWrappingUpSession = false
@@ -1864,7 +1917,7 @@ private struct GameDetailView: View {
     }
 
     private var notesSection: some View {
-        DetailSection("Previous Notes") {
+        DetailSection("Notes") {
             VStack(spacing: 6) {
                 ForEach(notesForDetailList) { note in
                     noteRow(note)
@@ -1879,6 +1932,19 @@ private struct GameDetailView: View {
                 beginEditing(note)
             } label: {
                 VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        if note.isPinned {
+                            Label("Pinned", systemImage: "pin.fill")
+                        }
+
+                        if note.kind == .sessionWrapUp {
+                            Label("Wrap Up", systemImage: "clock.arrow.circlepath")
+                        }
+                    }
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(QuietConsoleTheme.accent)
+
                     if let displayText = noteDisplayText(for: note) {
                         Text(displayText)
                             .font(.body)
@@ -1906,6 +1972,15 @@ private struct GameDetailView: View {
             .buttonStyle(.plain)
 
             rowActionsMenu {
+                Button {
+                    togglePinned(note)
+                } label: {
+                    Label(
+                        note.isPinned ? "Unpin" : "Pin",
+                        systemImage: note.isPinned ? "pin.slash" : "pin"
+                    )
+                }
+
                 Button {
                     beginEditing(note)
                 } label: {
@@ -2264,16 +2339,24 @@ private struct GameDetailView: View {
         game.notes.sorted { $0.createdAt > $1.createdAt }
     }
 
-    private var latestNote: GameNote? {
-        sortedNotes.first
+    private var latestSessionNote: GameNote? {
+        sortedNotes.first { $0.kind == .sessionWrapUp }
     }
 
-    private var latestNotePreviewImage: UIImage? {
-        notePreviewImage(from: latestNote?.photoData)
+    private var latestSessionNotePreviewImage: UIImage? {
+        notePreviewImage(from: latestSessionNote?.photoData)
     }
 
     private var notesForDetailList: [GameNote] {
-        hasSessionNotes ? Array(sortedNotes.dropFirst()) : sortedNotes
+        sortedNotes.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned {
+                return lhs.isPinned
+            }
+            if lhs.pinnedAt != rhs.pinnedAt {
+                return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
     }
 
     private var shouldShowNotesSection: Bool {
@@ -2348,12 +2431,12 @@ private struct GameDetailView: View {
             return firstTask.text
         }
 
-        if let latestNote {
-            let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let latestSessionNote {
+            let trimmed = latestSessionNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty == false {
                 return trimmed
             }
-            if latestNote.photoData != nil {
+            if latestSessionNote.photoData != nil {
                 return "Photo checkpoint"
             }
         }
@@ -2362,19 +2445,25 @@ private struct GameDetailView: View {
     }
 
     private var hasSessionNotes: Bool {
-        latestNote != nil
+        latestSessionNote != nil
     }
 
     private var lastSessionText: String {
-        guard let latestNote else {
+        guard let latestSessionNote else {
             return "No session notes yet."
         }
 
-        let trimmed = latestNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = latestSessionNote.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return latestNote.photoData == nil ? "No session notes yet." : "Photo checkpoint"
+            return latestSessionNote.photoData == nil ? "No session notes yet." : "Photo checkpoint"
         }
         return trimmed
+    }
+
+    private var pinnedNoteTexts: [String] {
+        notesForDetailList
+            .filter(\.isPinned)
+            .compactMap(noteDisplayText(for:))
     }
 
     private func noteRowHeight(for note: GameNote) -> CGFloat {
@@ -2472,7 +2561,12 @@ private struct GameDetailView: View {
         guard noteText.isEmpty == false || nextObjective.isEmpty == false || wrapUpImageData != nil else { return }
 
         if noteText.isEmpty == false || wrapUpImageData != nil {
-            let note = GameNote(text: noteText, photoData: wrapUpImageData, game: game)
+            let note = GameNote(
+                text: noteText,
+                photoData: wrapUpImageData,
+                kind: .sessionWrapUp,
+                game: game
+            )
             modelContext.insert(note)
             game.notes.insert(note, at: 0)
         }
@@ -2524,6 +2618,12 @@ private struct GameDetailView: View {
         editingNoteImageData = note.photoData
         editingNotePhotoItem = nil
         editingNote = note
+    }
+
+    private func togglePinned(_ note: GameNote) {
+        note.pinnedAt = note.isPinned ? nil : .now
+        saveContext()
+        showSavedMessage(note.isPinned ? "Note pinned" : "Note unpinned")
     }
 
     private func beginEditing(_ task: GameTask) {
@@ -3485,19 +3585,32 @@ private struct CheckpointBackup: Codable {
         let createdAt: Date
         let text: String
         let photoData: Data?
+        let kind: GameNoteKind
+        let pinnedAt: Date?
 
         private enum CodingKeys: String, CodingKey {
             case id
             case createdAt
             case text
             case photoData
+            case kind
+            case pinnedAt
         }
 
-        init(id: UUID, createdAt: Date, text: String, photoData: Data?) {
+        init(
+            id: UUID,
+            createdAt: Date,
+            text: String,
+            photoData: Data?,
+            kind: GameNoteKind,
+            pinnedAt: Date?
+        ) {
             self.id = id
             self.createdAt = createdAt
             self.text = text
             self.photoData = photoData
+            self.kind = kind
+            self.pinnedAt = pinnedAt
         }
 
         init(from decoder: Decoder) throws {
@@ -3506,6 +3619,8 @@ private struct CheckpointBackup: Codable {
             createdAt = try container.decode(Date.self, forKey: .createdAt)
             text = try container.decode(String.self, forKey: .text)
             photoData = try container.decodeIfPresent(Data.self, forKey: .photoData)
+            kind = try container.decodeIfPresent(GameNoteKind.self, forKey: .kind) ?? .note
+            pinnedAt = try container.decodeIfPresent(Date.self, forKey: .pinnedAt)
         }
     }
 
@@ -3540,7 +3655,9 @@ private struct CheckpointBackup: Codable {
                             id: note.id,
                             createdAt: note.createdAt,
                             text: note.text,
-                            photoData: note.photoData
+                            photoData: note.photoData,
+                            kind: note.kind,
+                            pinnedAt: note.pinnedAt
                         )
                     },
                     tasks: game.tasks.map { task in

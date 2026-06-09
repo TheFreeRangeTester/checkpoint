@@ -42,6 +42,7 @@ enum CheckpointWidgetSync {
 
     private static func makeFeaturedGame(from game: Game) -> FeaturedGame {
         let latestNote = game.notes
+            .filter { $0.kind == .sessionWrapUp }
             .sorted { $0.createdAt > $1.createdAt }
             .first
             .flatMap { note in
