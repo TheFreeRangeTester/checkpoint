@@ -28,27 +28,13 @@ private struct LibraryView: View {
     @State private var showingBackupCenter = false
     @State private var navigationPath: [UUID] = []
     @State private var pendingDeepLinkGameID: UUID?
+    @AppStorage("checkpoint.hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             Group {
                 if games.isEmpty {
-                    VStack(spacing: 28) {
-                        LibraryHeaderView(
-                            gameCount: sortedGames.count,
-                            activeTaskCount: activeTaskCount,
-                            recentlyPlayedCount: recentlyPlayedCount
-                        )
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
-
-                        ContentUnavailableView(
-                            "No Games Yet",
-                            systemImage: "gamecontroller",
-                            description: Text("Add a game to keep momentum between sessions.")
-                        )
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    emptyLibraryContent
                 } else {
                     List {
                         LibraryHeaderView(
@@ -137,16 +123,45 @@ private struct LibraryView: View {
                 }
             }
             .onAppear {
+                completeOnboardingIfLibraryHasContent()
                 CheckpointWidgetSync.sync(games: games)
                 routePendingDeepLinkIfPossible()
             }
             .onChange(of: games.map(\.id)) { _, _ in
+                completeOnboardingIfLibraryHasContent()
                 routePendingDeepLinkIfPossible()
             }
             .onOpenURL { url in
                 pendingDeepLinkGameID = CheckpointDeepLink.gameID(from: url)
                 routePendingDeepLinkIfPossible()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyLibraryContent: some View {
+        if shouldShowOnboarding {
+            CheckpointOnboardingView(
+                addFirstGame: beginFirstGame,
+                skip: completeOnboarding
+            )
+        } else {
+            VStack(spacing: 28) {
+                LibraryHeaderView(
+                    gameCount: sortedGames.count,
+                    activeTaskCount: activeTaskCount,
+                    recentlyPlayedCount: recentlyPlayedCount
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 20)
+
+                ContentUnavailableView(
+                    "No Games Yet",
+                    systemImage: "gamecontroller",
+                    description: Text("Add a game to keep momentum between sessions.")
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -214,7 +229,9 @@ private struct LibraryView: View {
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            EditButton()
+            if games.isEmpty == false {
+                EditButton()
+            }
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -260,21 +277,24 @@ private struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var libraryAddGameBar: some View {
-        HStack {
-            Spacer()
+        if shouldShowOnboarding == false {
+            HStack {
+                Spacer()
 
-            Button {
-                showingAddGame = true
-            } label: {
-                AddGameFloatingButtonLabel()
+                Button {
+                    showingAddGame = true
+                } label: {
+                    AddGameFloatingButtonLabel()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add Game")
+                .accessibilityHint("Adds a game to your library")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Add Game")
-            .accessibilityHint("Adds a game to your library")
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 16)
     }
 
     private func sendFeedback(kind: FeedbackKind) {
@@ -318,6 +338,24 @@ private struct LibraryView: View {
             guard let lastPlayedAt = game.lastPlayedAt else { return false }
             return calendar.dateComponents([.day], from: lastPlayedAt, to: .now).day.map { $0 < 14 } ?? false
         }.count
+    }
+
+    private var shouldShowOnboarding: Bool {
+        games.isEmpty && hasCompletedOnboarding == false
+    }
+
+    private func beginFirstGame() {
+        completeOnboarding()
+        showingAddGame = true
+    }
+
+    private func completeOnboarding() {
+        hasCompletedOnboarding = true
+    }
+
+    private func completeOnboardingIfLibraryHasContent() {
+        guard games.isEmpty == false else { return }
+        hasCompletedOnboarding = true
     }
 
     private func prepareBackupExport() {
@@ -607,6 +645,181 @@ private enum FeedbackKind {
             URLQueryItem(name: "body", value: body)
         ]
         return components.url
+    }
+}
+
+private struct CheckpointOnboardingView: View {
+    let addFirstGame: () -> Void
+    let skip: () -> Void
+
+    private let steps = [
+        OnboardingStep(
+            number: "01",
+            title: "Pick the game",
+            detail: "Start with the title you are playing now.",
+            systemImage: "gamecontroller.fill",
+            tint: QuietConsoleTheme.accent
+        ),
+        OnboardingStep(
+            number: "02",
+            title: "Set the checkpoint",
+            detail: "Keep the next objective, useful notes, and links together.",
+            systemImage: "scope",
+            tint: QuietConsoleTheme.hotAccent
+        ),
+        OnboardingStep(
+            number: "03",
+            title: "Resume cleanly",
+            detail: "Come back to the last session recap before you press play.",
+            systemImage: "play.rectangle.fill",
+            tint: QuietConsoleTheme.violetAccent
+        )
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                hero
+
+                VStack(spacing: 10) {
+                    ForEach(steps) { step in
+                        OnboardingStepRow(step: step)
+                    }
+                }
+
+                VStack(spacing: 10) {
+                    Button(action: addFirstGame) {
+                        Label("ADD FIRST GAME", systemImage: "plus")
+                            .font(.headline.weight(.black))
+                            .fontWidth(.condensed)
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(GamerPanelShape(cut: 18).fill(QuietConsoleTheme.actionGradient))
+                            .overlay {
+                                GamerPanelShape(cut: 18)
+                                    .strokeBorder(QuietConsoleTheme.hotAccent.opacity(0.82), lineWidth: 1.2)
+                            }
+                            .shadow(color: QuietConsoleTheme.hotAccent.opacity(0.32), radius: 14, x: 0, y: 6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button("Maybe Later", action: skip)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(QuietConsoleTheme.subtleText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 34)
+            .padding(.bottom, 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollIndicators(.hidden)
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                Image("CheckpointLogo")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .shadow(color: QuietConsoleTheme.accent.opacity(0.24), radius: 12, x: 0, y: 6)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Checkpoint")
+                        .font(.largeTitle.weight(.black))
+                        .fontWidth(.condensed)
+                        .textCase(.uppercase)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+
+                    Text("A lightweight save point for real life gaming.")
+                        .font(.caption.weight(.black))
+                        .fontWidth(.condensed)
+                        .textCase(.uppercase)
+                        .foregroundStyle(QuietConsoleTheme.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text("Keep your next move ready, even when a game sits untouched for a while.")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(
+            GamerPanelShape(cut: 24)
+                .fill(QuietConsoleTheme.deepPanelGradient)
+        )
+        .overlay {
+            GamerPanelShape(cut: 24)
+                .strokeBorder(QuietConsoleTheme.hotAccent.opacity(0.46), lineWidth: 1.2)
+        }
+    }
+}
+
+private struct OnboardingStep: Identifiable {
+    let number: String
+    let title: String
+    let detail: String
+    let systemImage: String
+    let tint: Color
+
+    var id: String { number }
+}
+
+private struct OnboardingStepRow: View {
+    let step: OnboardingStep
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 13) {
+            ZStack {
+                GamerPanelShape(cut: 12)
+                    .fill(step.tint.opacity(0.16))
+                    .frame(width: 48, height: 48)
+
+                Image(systemName: step.systemImage)
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(step.tint)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(step.number)
+                    .font(.caption2.weight(.black))
+                    .fontWidth(.condensed)
+                    .foregroundStyle(step.tint)
+
+                Text(step.title)
+                    .font(.headline.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(step.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .quietSurface(.primary, cornerRadius: 14)
+        .accessibilityElement(children: .combine)
     }
 }
 
