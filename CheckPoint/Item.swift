@@ -12,6 +12,8 @@ final class Game {
     var title: String
     var createdAt: Date
     var lastPlayedAt: Date?
+    var completedAt: Date?
+    var nextObjectiveID: UUID?
     var coverImageData: Data?
 
     @Relationship(deleteRule: .cascade, inverse: \GameNote.game)
@@ -28,6 +30,8 @@ final class Game {
         title: String,
         createdAt: Date = .now,
         lastPlayedAt: Date? = nil,
+        completedAt: Date? = nil,
+        nextObjectiveID: UUID? = nil,
         coverImageData: Data? = nil,
         notes: [GameNote] = [],
         tasks: [GameTask] = [],
@@ -37,6 +41,8 @@ final class Game {
         self.title = title
         self.createdAt = createdAt
         self.lastPlayedAt = lastPlayedAt
+        self.completedAt = completedAt
+        self.nextObjectiveID = nextObjectiveID
         self.coverImageData = coverImageData
         self.notes = notes
         self.tasks = tasks

@@ -28,6 +28,9 @@ private struct LibraryView: View {
     @State private var showingBackupCenter = false
     @State private var navigationPath: [UUID] = []
     @State private var pendingDeepLinkGameID: UUID?
+    @State private var showingFinishedGames = false
+    @State private var quickCheckpointRequest: QuickCheckpointRequest?
+    @State private var checkpointError: String?
     @AppStorage("checkpoint.hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -38,7 +41,8 @@ private struct LibraryView: View {
                 } else {
                     List {
                         LibraryHeaderView(
-                            gameCount: sortedGames.count,
+                            gameCount: activeGames.count,
+                            finishedGameCount: finishedGames.count,
                             activeTaskCount: activeTaskCount,
                             recentlyPlayedCount: recentlyPlayedCount
                         )
@@ -46,10 +50,23 @@ private struct LibraryView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
 
-                        ForEach(sortedGames) { game in
+                        if activeGames.isEmpty {
+                            ContentUnavailableView(
+                                "No Active Games",
+                                systemImage: "gamecontroller",
+                                description: Text("Add a game or play a finished one again.")
+                            )
+                            .listRowBackground(Color.clear)
+                        }
+
+                        ForEach(activeGames) { game in
                             gameRow(for: game)
                         }
-                        .onDelete(perform: deleteGames)
+                        .onDelete(perform: deleteActiveGames)
+
+                        if finishedGames.isEmpty == false {
+                            finishedGamesSection
+                        }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -65,6 +82,13 @@ private struct LibraryView: View {
             }
             .sheet(isPresented: $showingAddGame) {
                 AddEditGameView(mode: .add)
+            }
+            .sheet(item: $quickCheckpointRequest) { request in
+                QuickCheckpointComposer(
+                    games: checkpointGames,
+                    preferredGameID: request.gameID,
+                    startsWithPhoto: request.startsWithPhoto
+                )
             }
             .sheet(isPresented: $showingBackupCenter) {
                 backupCenterSheet
@@ -111,6 +135,14 @@ private struct LibraryView: View {
             } message: {
                 Text(backupAlertMessage ?? "Done.")
             }
+            .alert("Checkpoint", isPresented: Binding(
+                get: { checkpointError != nil },
+                set: { if !$0 { checkpointError = nil } }
+            )) {
+                Button("OK", role: .cancel) { checkpointError = nil }
+            } message: {
+                Text(checkpointError ?? "")
+            }
             .navigationDestination(for: UUID.self) { gameID in
                 if let game = games.first(where: { $0.id == gameID }) {
                     GameDetailView(game: game)
@@ -132,6 +164,18 @@ private struct LibraryView: View {
                 routePendingDeepLinkIfPossible()
             }
             .onOpenURL { url in
+                if let request = CheckpointDeepLink.quickCheckpointRequest(from: url) {
+                    guard checkpointGames.isEmpty == false else {
+                        checkpointError = "Add a game before saving a checkpoint."
+                        return
+                    }
+                    if let gameID = request.gameID, !games.contains(where: { $0.id == gameID }) {
+                        checkpointError = "That game is no longer available in your library."
+                        return
+                    }
+                    quickCheckpointRequest = request
+                    return
+                }
                 pendingDeepLinkGameID = CheckpointDeepLink.gameID(from: url)
                 routePendingDeepLinkIfPossible()
             }
@@ -148,7 +192,8 @@ private struct LibraryView: View {
         } else {
             VStack(spacing: 28) {
                 LibraryHeaderView(
-                    gameCount: sortedGames.count,
+                    gameCount: activeGames.count,
+                    finishedGameCount: finishedGames.count,
                     activeTaskCount: activeTaskCount,
                     recentlyPlayedCount: recentlyPlayedCount
                 )
@@ -277,10 +322,22 @@ private struct LibraryView: View {
         }
     }
 
+    private var checkpointGames: [Game] { activeGames + finishedGames }
+
     @ViewBuilder
     private var libraryAddGameBar: some View {
         if shouldShowOnboarding == false {
             HStack {
+                if !checkpointGames.isEmpty {
+                    Button {
+                        quickCheckpointRequest = QuickCheckpointRequest()
+                    } label: {
+                        Label("Quick Checkpoint", systemImage: "plus.bubble.fill")
+                            .font(.subheadline.weight(.bold))
+                            .padding(14)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                }
                 Spacer()
 
                 Button {
@@ -302,16 +359,24 @@ private struct LibraryView: View {
         openURL(url)
     }
 
-    private func deleteGames(at offsets: IndexSet) {
+    private func deleteActiveGames(at offsets: IndexSet) {
         for index in offsets {
-            modelContext.delete(sortedGames[index])
+            modelContext.delete(activeGames[index])
         }
 
         saveLibraryChanges()
     }
 
-    private var sortedGames: [Game] {
-        games.sorted { lhs, rhs in
+    private func deleteFinishedGames(at offsets: IndexSet) {
+        for index in offsets {
+            modelContext.delete(finishedGames[index])
+        }
+
+        saveLibraryChanges()
+    }
+
+    private var activeGames: [Game] {
+        GameCompletionPolicy.activeGames(from: games).sorted { lhs, rhs in
             switch (lhs.lastPlayedAt, rhs.lastPlayedAt) {
             case let (left?, right?):
                 if left != right { return left > right }
@@ -326,15 +391,26 @@ private struct LibraryView: View {
         }
     }
 
+    private var finishedGames: [Game] {
+        games
+            .filter { $0.completedAt != nil }
+            .sorted { lhs, rhs in
+                if lhs.completedAt != rhs.completedAt {
+                    return (lhs.completedAt ?? .distantPast) > (rhs.completedAt ?? .distantPast)
+                }
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
     private var activeTaskCount: Int {
-        games.reduce(0) { partial, game in
+        activeGames.reduce(0) { partial, game in
             partial + game.tasks.filter { !$0.isDone }.count
         }
     }
 
     private var recentlyPlayedCount: Int {
         let calendar = Calendar.current
-        return games.filter { game in
+        return activeGames.filter { game in
             guard let lastPlayedAt = game.lastPlayedAt else { return false }
             return calendar.dateComponents([.day], from: lastPlayedAt, to: .now).day.map { $0 < 14 } ?? false
         }.count
@@ -342,6 +418,41 @@ private struct LibraryView: View {
 
     private var shouldShowOnboarding: Bool {
         games.isEmpty && hasCompletedOnboarding == false
+    }
+
+    @ViewBuilder
+    private var finishedGamesSection: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                showingFinishedGames.toggle()
+            }
+        } label: {
+            HStack {
+                Label("Finished (\(finishedGames.count))", systemImage: "checkmark.seal.fill")
+                    .font(.headline.weight(.black))
+                    .fontWidth(.condensed)
+                    .textCase(.uppercase)
+                    .foregroundStyle(QuietConsoleTheme.accent)
+
+                Spacer()
+
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(QuietConsoleTheme.subtleText)
+                    .rotationEffect(.degrees(showingFinishedGames ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .accessibilityLabel(showingFinishedGames ? "Hide finished games" : "Show finished games")
+
+        if showingFinishedGames {
+            ForEach(finishedGames) { game in
+                gameRow(for: game)
+            }
+            .onDelete(perform: deleteFinishedGames)
+        }
     }
 
     private func beginFirstGame() {
@@ -385,7 +496,7 @@ private struct LibraryView: View {
 
                 let data = try Data(contentsOf: url)
                 let backup = try CheckpointBackup.decode(from: data)
-                guard backup.schemaVersion == CheckpointBackup.currentSchemaVersion else {
+                guard CheckpointBackup.supportedSchemaVersions.contains(backup.schemaVersion) else {
                     showBackupAlert("This backup version isn't supported yet.")
                     return
                 }
@@ -446,6 +557,8 @@ private struct LibraryView: View {
             title: snapshot.title,
             createdAt: snapshot.createdAt,
             lastPlayedAt: snapshot.lastPlayedAt,
+            completedAt: snapshot.completedAt,
+            nextObjectiveID: snapshot.nextObjectiveID,
             coverImageData: snapshot.coverImageData
         )
 
@@ -495,6 +608,8 @@ private struct LibraryView: View {
         game.title = snapshot.title
         game.createdAt = snapshot.createdAt
         game.lastPlayedAt = snapshot.lastPlayedAt
+        game.completedAt = snapshot.completedAt
+        game.nextObjectiveID = snapshot.nextObjectiveID
         game.coverImageData = snapshot.coverImageData
 
         var notesByID = Dictionary(uniqueKeysWithValues: game.notes.map { ($0.id, $0) })
@@ -825,6 +940,7 @@ private struct OnboardingStepRow: View {
 
 private struct LibraryHeaderView: View {
     let gameCount: Int
+    let finishedGameCount: Int
     let activeTaskCount: Int
     let recentlyPlayedCount: Int
 
@@ -865,7 +981,11 @@ private struct LibraryHeaderView: View {
     }
 
     private var summary: String {
-        var parts = [gameCount == 1 ? "1 game" : "\(gameCount) games"]
+        var parts = [gameCount == 1 ? "1 active game" : "\(gameCount) active games"]
+
+        if finishedGameCount > 0 {
+            parts.append(finishedGameCount == 1 ? "1 finished" : "\(finishedGameCount) finished")
+        }
 
         if activeTaskCount > 0 {
             parts.append(activeTaskCount == 1 ? "1 active task" : "\(activeTaskCount) active tasks")
@@ -895,7 +1015,7 @@ private struct GameRowView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Text(GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt))
+                    Text(activityLabel)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(QuietConsoleTheme.subtleText)
 
@@ -967,15 +1087,20 @@ private struct GameRowView: View {
     }
 
     private var activeTaskLabel: String {
+        if game.completedAt != nil {
+            return "Finished"
+        }
+
         let count = game.tasks.filter { !$0.isDone }.count
         return count == 1 ? "1 active task" : "\(count) active tasks"
     }
 
     private var objectivePreview: String {
-        if let task = game.tasks
-            .filter({ !$0.isDone })
-            .sorted(by: { $0.createdAt < $1.createdAt })
-            .first {
+        if let completedAt = game.completedAt {
+            return "Finished \(completedAt.formatted(date: .abbreviated, time: .omitted))"
+        }
+
+        if let task = CheckpointPolicy.pendingTasks(for: game).first {
             return task.text
         }
 
@@ -990,6 +1115,12 @@ private struct GameRowView: View {
 
         return "Review your last checkpoint"
     }
+
+    private var activityLabel: String {
+        game.completedAt == nil
+            ? GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt)
+            : "Progress saved"
+    }
 }
 
 private struct GameDetailHeaderView: View {
@@ -997,6 +1128,7 @@ private struct GameDetailHeaderView: View {
     let coverImageData: Data?
     let lastPlayedLabel: String
     let activeTaskCount: Int
+    let completedAt: Date?
     let accentColor: Color
 
     var body: some View {
@@ -1011,22 +1143,38 @@ private struct GameDetailHeaderView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
-                    Text(lastPlayedLabel)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(QuietConsoleTheme.activityText)
-                        .lineLimit(1)
-
-                    Text(activeTaskLabel)
+                if let completedAt {
+                    Label(
+                        "Finished \(completedAt.formatted(date: .abbreviated, time: .omitted))",
+                        systemImage: "checkmark.seal.fill"
+                    )
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(QuietConsoleTheme.activityText)
+                        .foregroundStyle(accentColor)
                         .lineLimit(1)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(QuietConsoleTheme.activityFill)
+                                .fill(accentColor.opacity(0.14))
                         )
+                } else {
+                    HStack(spacing: 8) {
+                        Text(lastPlayedLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(QuietConsoleTheme.activityText)
+                            .lineLimit(1)
+
+                        Text(activeTaskLabel)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(QuietConsoleTheme.activityText)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(QuietConsoleTheme.activityFill)
+                            )
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1066,11 +1214,23 @@ private struct GameDetailHeaderView: View {
 }
 
 private struct ContinuePlayingButton: View {
+    let title: String
+    let systemImage: String
     let action: () -> Void
+
+    init(
+        title: String = "CONTINUE PLAYING",
+        systemImage: String = "play.fill",
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
-            Label("CONTINUE PLAYING", systemImage: "play.fill")
+            Label(title, systemImage: systemImage)
                 .font(.headline.weight(.black))
                 .fontWidth(.condensed)
                 .labelStyle(.titleAndIcon)
@@ -1092,11 +1252,53 @@ private struct ContinuePlayingButton: View {
     }
 }
 
+private struct FinishedGamePanel: View {
+    let pendingTaskCount: Int
+    let playAgain: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Progress saved", systemImage: "checkmark.seal.fill")
+                .font(.headline.weight(.black))
+                .fontWidth(.condensed)
+                .textCase(.uppercase)
+                .foregroundStyle(QuietConsoleTheme.accent)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ContinuePlayingButton(
+                title: "PLAY AGAIN",
+                systemImage: "arrow.counterclockwise",
+                action: playAgain
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(GamerPanelShape(cut: 24).fill(QuietConsoleTheme.deepPanelGradient))
+        .overlay(
+            GamerPanelShape(cut: 24)
+                .strokeBorder(QuietConsoleTheme.accent.opacity(0.48), lineWidth: 1.25)
+        )
+    }
+
+    private var message: String {
+        guard pendingTaskCount > 0 else {
+            return "Your checkpoints, notes, links, and completed tasks are still here."
+        }
+
+        let taskLabel = pendingTaskCount == 1 ? "1 task is" : "\(pendingTaskCount) tasks are"
+        return "Your progress is saved. \(taskLabel) waiting if you decide to play again."
+    }
+}
+
 private struct ResumeCommandCenter<TaskContent: View>: View {
     let objective: String
     let lastSession: String
     let hasSessionNotes: Bool
-    let pinnedNotes: [String]
+    let pinnedNotes: [GameNote]
+    let sessionPhotoData: Data?
     let continueAction: () -> Void
     let taskContent: TaskContent
 
@@ -1104,7 +1306,8 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
         objective: String,
         lastSession: String,
         hasSessionNotes: Bool,
-        pinnedNotes: [String],
+        pinnedNotes: [GameNote],
+        sessionPhotoData: Data?,
         continueAction: @escaping () -> Void,
         @ViewBuilder taskContent: () -> TaskContent
     ) {
@@ -1112,12 +1315,16 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
         self.lastSession = lastSession
         self.hasSessionNotes = hasSessionNotes
         self.pinnedNotes = pinnedNotes
+        self.sessionPhotoData = sessionPhotoData
         self.continueAction = continueAction
         self.taskContent = taskContent()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            Label("Previously on…", systemImage: "clock.arrow.circlepath")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(QuietConsoleTheme.accent)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Text("Next up")
@@ -1141,6 +1348,9 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
 
             if pinnedNotes.isEmpty == false {
                 PinnedNotesPanel(notes: pinnedNotes)
+            }
+            if let sessionPhotoData {
+                CheckpointMemoryImage(data: sessionPhotoData)
             }
 
             ContinuePlayingButton(action: continueAction)
@@ -1170,21 +1380,26 @@ private struct ResumeCommandCenter<TaskContent: View>: View {
 }
 
 private struct PinnedNotesPanel: View {
-    let notes: [String]
+    let notes: [GameNote]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label("Pinned", systemImage: "pin.fill")
+            Label(notes.count > 1 ? "Pinned · Latest" : "Pinned", systemImage: "pin.fill")
                 .font(.caption.weight(.black))
                 .fontWidth(.condensed)
                 .textCase(.uppercase)
                 .foregroundStyle(QuietConsoleTheme.accent)
 
-            ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
-                Text(note)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            ForEach(notes.prefix(1)) { note in
+                if !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(note.text)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let data = note.photoData {
+                    CheckpointMemoryImage(data: data)
+                }
             }
         }
         .padding(.vertical, 10)
@@ -1401,6 +1616,7 @@ private struct GameDetailView: View {
     private enum ActiveSheet: String, Identifiable {
         case edit
         case quickNote
+        case photoCheckpoint
         case quickTask
         case resume
         var id: String { rawValue }
@@ -1436,12 +1652,11 @@ private struct GameDetailView: View {
 
     @State private var activeSheet: ActiveSheet?
     @State private var showingDeleteConfirmation = false
-    @State private var quickNoteText = ""
-    @State private var quickNotePhotoItem: PhotosPickerItem?
-    @State private var quickNoteImageData: Data?
     @State private var quickTaskText = ""
     @State private var savedMessage: String?
     @State private var savedMessageTask: Task<Void, Never>?
+    @State private var savedMessageActionTitle: String?
+    @State private var savedMessageAction: (() -> Void)?
     @State private var editingNote: GameNote?
     @State private var editingNoteText = ""
     @State private var editingNotePhotoItem: PhotosPickerItem?
@@ -1458,12 +1673,12 @@ private struct GameDetailView: View {
     @State private var showingAddActions = false
     @State private var showingAllActiveTasks = false
     @State private var showingCompletedTasks = false
+    @State private var showingFinishConfirmation = false
     @State private var isWrappingUpSession = false
     @State private var wrapUpNoteText = ""
     @State private var wrapUpNextObjectiveText = ""
     @State private var wrapUpPhotoItem: PhotosPickerItem?
     @State private var wrapUpImageData: Data?
-    @FocusState private var isQuickNoteFieldFocused: Bool
     @FocusState private var isQuickTaskFieldFocused: Bool
     @FocusState private var isEditTaskFieldFocused: Bool
     @FocusState private var isResourceURLFieldFocused: Bool
@@ -1478,10 +1693,18 @@ private struct GameDetailView: View {
                     coverImageData: game.coverImageData,
                     lastPlayedLabel: GameActivityFormatter.lastActivityLabel(for: game.lastPlayedAt),
                     activeTaskCount: pendingTasks.count,
+                    completedAt: game.completedAt,
                     accentColor: game.stableAccentColor
                 )
 
-                resumeCommandCenter
+                if game.completedAt == nil {
+                    resumeCommandCenter
+                } else {
+                    FinishedGamePanel(
+                        pendingTaskCount: pendingTasks.count,
+                        playAgain: playAgain
+                    )
+                }
 
                 if shouldShowNotesSection {
                     notesSection
@@ -1496,15 +1719,25 @@ private struct GameDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 10) {
                 if let savedMessage {
-                    Text(savedMessage)
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(QuietConsoleTheme.accent)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .quietSurface(.elevated, cornerRadius: 12)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        .accessibilityLabel(savedMessage)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    HStack(spacing: 12) {
+                        Text(savedMessage)
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(QuietConsoleTheme.accent)
+
+                        if let savedMessageActionTitle, let savedMessageAction {
+                            Button(savedMessageActionTitle) {
+                                savedMessageTask?.cancel()
+                                savedMessageAction()
+                                clearSavedMessage()
+                            }
+                            .font(.footnote.weight(.black))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .quietSurface(.elevated, cornerRadius: 12)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
 
                 if showingAddActions {
@@ -1550,6 +1783,30 @@ private struct GameDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        activeSheet = .quickNote
+                    } label: {
+                        Label("Quick Checkpoint", systemImage: "plus.bubble")
+                    }
+                    Button {
+                        activeSheet = .photoCheckpoint
+                    } label: {
+                        Label("Checkpoint from Screenshot", systemImage: "photo.badge.plus")
+                    }
+                    if game.completedAt == nil {
+                        Button {
+                            showingFinishConfirmation = true
+                        } label: {
+                            Label("Mark as Finished", systemImage: "checkmark.seal")
+                        }
+                    } else {
+                        Button {
+                            markGameActive()
+                        } label: {
+                            Label("Mark as Active", systemImage: "arrow.uturn.backward")
+                        }
+                    }
+
                     Button("Edit") {
                         activeSheet = .edit
                     }
@@ -1561,6 +1818,14 @@ private struct GameDetailView: View {
                         .font(.body.weight(.semibold))
                 }
             }
+        }
+        .alert("Mark this game as finished?", isPresented: $showingFinishConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Mark Finished") {
+                markGameFinished()
+            }
+        } message: {
+            Text(finishConfirmationMessage)
         }
         .alert("Delete this game?", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -1596,6 +1861,10 @@ private struct GameDetailView: View {
                 AddEditGameView(mode: .edit(game))
             case .quickNote:
                 quickNoteComposer
+            case .photoCheckpoint:
+                QuickCheckpointComposer(games: [game], startsWithPhoto: true) {
+                    showSavedMessage("Checkpoint saved")
+                }
             case .quickTask:
                 quickTaskComposer
             case .resume:
@@ -1783,23 +2052,11 @@ private struct GameDetailView: View {
                 SessionMemoryLine(text: lastSessionText)
             }
 
-            if let latestSessionNotePreviewImage {
-                Button {
-                    resumePreviewImageData = latestSessionNote?.photoData
-                } label: {
-                    Image(uiImage: latestSessionNotePreviewImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 132)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open latest note photo")
+            if !pinnedNotes.isEmpty {
+                PinnedNotesPanel(notes: pinnedNotes)
             }
-
-            if pinnedNoteTexts.isEmpty == false {
-                PinnedNotesPanel(notes: pinnedNoteTexts)
+            if let sessionPhotoData {
+                CheckpointMemoryImage(data: sessionPhotoData)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2002,13 +2259,30 @@ private struct GameDetailView: View {
             objective: currentObjectiveText,
             lastSession: lastSessionText,
             hasSessionNotes: hasSessionNotes,
-            pinnedNotes: pinnedNoteTexts,
+            pinnedNotes: pinnedNotes,
+            sessionPhotoData: sessionPhotoData,
             continueAction: {
                 markGameResumed()
                 isWrappingUpSession = false
                 activeSheet = .resume
             }
         ) {
+            HStack {
+                Button {
+                    activeSheet = .quickNote
+                } label: {
+                    Label("Quick Checkpoint", systemImage: "plus.bubble")
+                }
+                Spacer()
+                Button {
+                    activeSheet = .photoCheckpoint
+                } label: {
+                    Image(systemName: "photo.badge.plus")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Checkpoint from screenshot")
+            }
+            .font(.subheadline.weight(.bold))
             activeTasksInlineContent
         }
     }
@@ -2302,53 +2576,9 @@ private struct GameDetailView: View {
     }
 
     private var quickNoteComposer: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("What should future you remember?", text: $quickNoteText)
-                    .textFieldStyle(.roundedBorder)
-                    .submitLabel(.done)
-                    .focused($isQuickNoteFieldFocused)
-                    .onSubmit { quickSaveNote() }
-
-                PhotosPicker(selection: $quickNotePhotoItem, matching: .images) {
-                    Label(quickNoteImageData == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
-                }
-
-                if let previewImage = notePreviewImage(from: quickNoteImageData) {
-                    noteComposerImagePreview(
-                        image: previewImage,
-                        removeAction: { quickNoteImageData = nil }
-                    )
-                }
-
-                Button("Save Checkpoint") { quickSaveNote() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(QuietConsoleTheme.accent)
-                    .disabled(canSaveQuickNote == false)
-            }
-            .padding(16)
-            .navigationTitle("Quick Checkpoint")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        clearQuickNoteDraft()
-                        activeSheet = nil
-                    }
-                }
-            }
-            .onChange(of: quickNotePhotoItem) { _, newItem in
-                Task {
-                    let loadedData = try? await newItem?.loadTransferable(type: Data.self)
-                    let optimizedData = optimizedNoteImageData(from: loadedData)
-                    await MainActor.run {
-                        quickNoteImageData = optimizedData
-                    }
-                }
-            }
-            .onAppear { isQuickNoteFieldFocused = true }
+        QuickCheckpointComposer(games: [game]) {
+            showSavedMessage("Checkpoint saved")
         }
-        .presentationDetents([.medium])
     }
 
     private var quickTaskComposer: some View {
@@ -2556,10 +2786,6 @@ private struct GameDetailView: View {
         sortedNotes.first { $0.kind == .sessionWrapUp }
     }
 
-    private var latestSessionNotePreviewImage: UIImage? {
-        notePreviewImage(from: latestSessionNote?.photoData)
-    }
-
     private var notesForDetailList: [GameNote] {
         sortedNotes.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned {
@@ -2628,7 +2854,7 @@ private struct GameDetailView: View {
     }
 
     private var pendingTasks: [GameTask] {
-        sortedTasks.filter { $0.isDone == false }
+        CheckpointPolicy.pendingTasks(for: game)
     }
 
     private var currentPendingTask: GameTask? {
@@ -2637,6 +2863,16 @@ private struct GameDetailView: View {
 
     private var completedTasks: [GameTask] {
         sortedTasks.filter { $0.isDone }
+    }
+
+    private var finishConfirmationMessage: String {
+        let count = pendingTasks.count
+        guard count > 0 else {
+            return "Your checkpoints, notes, links, and tasks will stay saved."
+        }
+
+        let taskLabel = count == 1 ? "1 active task" : "\(count) active tasks"
+        return "This game has \(taskLabel). They will stay saved, but will not count while the game is finished."
     }
 
     private var currentObjectiveText: String {
@@ -2673,10 +2909,14 @@ private struct GameDetailView: View {
         return trimmed
     }
 
-    private var pinnedNoteTexts: [String] {
-        notesForDetailList
-            .filter(\.isPinned)
-            .compactMap(noteDisplayText(for:))
+    private var pinnedNotes: [GameNote] {
+        notesForDetailList.filter(\.isPinned)
+    }
+
+    private var sessionPhotoData: Data? {
+        // The pinned reference already displays this image when it is also the last checkpoint.
+        guard latestSessionNote?.id != pinnedNotes.first?.id else { return nil }
+        return latestSessionNote?.photoData
     }
 
     private func noteRowHeight(for note: GameNote) -> CGFloat {
@@ -2690,10 +2930,6 @@ private struct GameDetailView: View {
         let verticalPadding: CGFloat = 24
         let bottomSpacing: CGFloat = 8
         return textHeight + imageHeight + spacing + timestampHeight + verticalPadding + bottomSpacing
-    }
-
-    private var canSaveQuickNote: Bool {
-        quickNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || quickNoteImageData != nil
     }
 
     private var canSaveEditedNote: Bool {
@@ -2728,20 +2964,6 @@ private struct GameDetailView: View {
         )
     }
 
-    private func quickSaveNote() {
-        let trimmed = quickNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false || quickNoteImageData != nil else { return }
-
-        let note = GameNote(text: trimmed, photoData: quickNoteImageData, game: game)
-        modelContext.insert(note)
-        game.notes.insert(note, at: 0)
-        clearQuickNoteDraft()
-        Haptics.success()
-        saveContext()
-        showSavedMessage("Checkpoint saved")
-        activeSheet = nil
-    }
-
     private func quickSaveTask() {
         let trimmed = quickTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -2773,21 +2995,14 @@ private struct GameDetailView: View {
         let nextObjective = wrapUpNextObjectiveText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard noteText.isEmpty == false || nextObjective.isEmpty == false || wrapUpImageData != nil else { return }
 
-        if noteText.isEmpty == false || wrapUpImageData != nil {
-            let note = GameNote(
-                text: noteText,
-                photoData: wrapUpImageData,
-                kind: .sessionWrapUp,
-                game: game
+        do {
+            try CheckpointPolicy.save(
+                for: game, summary: noteText, objective: nextObjective,
+                photoData: wrapUpImageData, pin: false, in: modelContext
             )
-            modelContext.insert(note)
-            game.notes.insert(note, at: 0)
-        }
-
-        if nextObjective.isEmpty == false {
-            let task = GameTask(text: nextObjective, isDone: false, game: game)
-            modelContext.insert(task)
-            game.tasks.append(task)
+        } catch {
+            showSavedMessage("Couldn't save. Your draft is still here.")
+            return
         }
 
         clearSessionWrapUpDraft()
@@ -2900,12 +3115,6 @@ private struct GameDetailView: View {
         showSavedMessage("Task deleted")
     }
 
-    private func clearQuickNoteDraft() {
-        quickNoteText = ""
-        quickNotePhotoItem = nil
-        quickNoteImageData = nil
-    }
-
     private func clearSessionWrapUpDraft() {
         wrapUpNoteText = ""
         wrapUpNextObjectiveText = ""
@@ -2990,6 +3199,41 @@ private struct GameDetailView: View {
         saveContext()
     }
 
+    private func markGameFinished(now: Date = .now) {
+        GameCompletionPolicy.markFinished(game, at: now)
+        Haptics.success()
+        saveContext()
+        showSavedMessage(
+            "Game marked finished",
+            actionTitle: "Undo",
+            durationNanoseconds: 4_000_000_000
+        ) {
+            GameCompletionPolicy.markActive(game)
+            Haptics.tap()
+            saveContext()
+        }
+    }
+
+    private func markGameActive() {
+        GameCompletionPolicy.markActive(game)
+        Haptics.tap()
+        saveContext()
+        showSavedMessage("Game moved to active")
+    }
+
+    private func playAgain() {
+        GameCompletionPolicy.markActive(game)
+        game.lastPlayedAt = GameLastPlayedPolicy.updatedValue(
+            for: game.lastPlayedAt,
+            action: .resume,
+            now: .now
+        )
+        Haptics.success()
+        saveContext()
+        isWrappingUpSession = false
+        activeSheet = .resume
+    }
+
     private func saveContext() {
         do {
             try modelContext.save()
@@ -3055,17 +3299,34 @@ private struct GameDetailView: View {
         }
     }
 
-    private func showSavedMessage(_ message: String) {
+    private func showSavedMessage(
+        _ message: String,
+        actionTitle: String? = nil,
+        durationNanoseconds: UInt64 = 1_200_000_000,
+        action: (() -> Void)? = nil
+    ) {
         savedMessageTask?.cancel()
         withAnimation(.easeInOut(duration: 0.15)) {
             savedMessage = message
+            savedMessageActionTitle = actionTitle
+            savedMessageAction = action
         }
 
         savedMessageTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            withAnimation(.easeInOut(duration: 0.2)) {
-                savedMessage = nil
+            do {
+                try await Task.sleep(nanoseconds: durationNanoseconds)
+            } catch {
+                return
             }
+            clearSavedMessage()
+        }
+    }
+
+    private func clearSavedMessage() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            savedMessage = nil
+            savedMessageActionTitle = nil
+            savedMessageAction = nil
         }
     }
 
@@ -3422,7 +3683,7 @@ private struct ConsoleBackdrop: View {
     }
 }
 
-private enum QuietConsoleTheme {
+enum QuietConsoleTheme {
     static let accent = Color(red: 0.08, green: 0.93, blue: 0.82)
     static let hotAccent = Color(red: 1.00, green: 0.07, blue: 0.31)
     static let violetAccent = Color(red: 0.58, green: 0.25, blue: 1.00)
@@ -3732,8 +3993,9 @@ private struct CheckpointBackupDocument: FileDocument {
     }
 }
 
-private struct CheckpointBackup: Codable {
-    static let currentSchemaVersion = 2
+struct CheckpointBackup: Codable {
+    static let currentSchemaVersion = 4
+    static let supportedSchemaVersions = 1...currentSchemaVersion
 
     let schemaVersion: Int
     let exportedAt: Date
@@ -3744,6 +4006,8 @@ private struct CheckpointBackup: Codable {
         let title: String
         let createdAt: Date
         let lastPlayedAt: Date?
+        let completedAt: Date?
+        let nextObjectiveID: UUID?
         let coverImageData: Data?
         let notes: [NoteSnapshot]
         let tasks: [TaskSnapshot]
@@ -3754,6 +4018,8 @@ private struct CheckpointBackup: Codable {
             case title
             case createdAt
             case lastPlayedAt
+            case completedAt
+            case nextObjectiveID
             case coverImageData
             case notes
             case tasks
@@ -3765,6 +4031,8 @@ private struct CheckpointBackup: Codable {
             title: String,
             createdAt: Date,
             lastPlayedAt: Date?,
+            completedAt: Date?,
+            nextObjectiveID: UUID?,
             coverImageData: Data?,
             notes: [NoteSnapshot],
             tasks: [TaskSnapshot],
@@ -3774,6 +4042,8 @@ private struct CheckpointBackup: Codable {
             self.title = title
             self.createdAt = createdAt
             self.lastPlayedAt = lastPlayedAt
+            self.completedAt = completedAt
+            self.nextObjectiveID = nextObjectiveID
             self.coverImageData = coverImageData
             self.notes = notes
             self.tasks = tasks
@@ -3786,6 +4056,8 @@ private struct CheckpointBackup: Codable {
             title = try container.decode(String.self, forKey: .title)
             createdAt = try container.decode(Date.self, forKey: .createdAt)
             lastPlayedAt = try container.decodeIfPresent(Date.self, forKey: .lastPlayedAt)
+            completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+            nextObjectiveID = try container.decodeIfPresent(UUID.self, forKey: .nextObjectiveID)
             coverImageData = try container.decodeIfPresent(Data.self, forKey: .coverImageData)
             notes = try container.decode([NoteSnapshot].self, forKey: .notes)
             tasks = try container.decode([TaskSnapshot].self, forKey: .tasks)
@@ -3862,6 +4134,8 @@ private struct CheckpointBackup: Codable {
                     title: game.title,
                     createdAt: game.createdAt,
                     lastPlayedAt: game.lastPlayedAt,
+                    completedAt: game.completedAt,
+                    nextObjectiveID: game.nextObjectiveID,
                     coverImageData: game.coverImageData,
                     notes: game.notes.map { note in
                         NoteSnapshot(

@@ -5,5 +5,6 @@ import WidgetKit
 struct CheckPointWidgetBundle: WidgetBundle {
     var body: some Widget {
         CheckPointResumeWidget()
+        QuickCheckpointWidget()
     }
 }

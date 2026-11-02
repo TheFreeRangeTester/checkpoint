@@ -22,8 +22,8 @@ enum CheckpointWidgetSync {
         sync(games: games)
     }
 
-    private static func makeSnapshot(from games: [Game]) -> CheckpointWidgetSnapshot {
-        let prioritizedGames = games.sorted { lhs, rhs in
+    static func makeSnapshot(from games: [Game]) -> CheckpointWidgetSnapshot {
+        let prioritizedGames = GameCompletionPolicy.activeGames(from: games).sorted { lhs, rhs in
             compare(lhs, rhs) == .orderedDescending
         }
 
@@ -36,7 +36,8 @@ enum CheckpointWidgetSync {
         return CheckpointWidgetSnapshot(
             refreshedAt: .now,
             featuredGame: featuredGame,
-            recentGames: recentGames
+            recentGames: recentGames,
+            selectableGames: prioritizedGames.map { CheckpointWidgetGame(id: $0.id, title: $0.title) }
         )
     }
 
@@ -50,17 +51,7 @@ enum CheckpointWidgetSync {
                 return nonEmptyValue(trimmed) ?? (note.photoData == nil ? nil : "Photo checkpoint")
             }
 
-        let nextTaskRaw = game.tasks
-            .filter { !$0.isDone }
-            .sorted { lhs, rhs in
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt < rhs.createdAt
-                }
-
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
-            .first?
-            .text
+        let nextTaskRaw = CheckpointPolicy.pendingTasks(for: game).first?.text
         let nextTask = nextTaskRaw.flatMap { task in
             nonEmptyValue(task.trimmingCharacters(in: .whitespacesAndNewlines))
         }

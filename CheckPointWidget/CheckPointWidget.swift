@@ -217,6 +217,14 @@ private struct CheckPointResumeWidgetView: View {
                                 .fontWidth(.condensed)
                                 .foregroundStyle(widgetAccent)
                             compactTasksBadge(pendingCount: featuredGame.pendingTasksCount)
+                            Spacer(minLength: 0)
+                            Link(destination: CheckpointDeepLink.quickCheckpointURL(gameID: featuredGame.id)) {
+                                Image(systemName: "plus.bubble.fill")
+                                    .font(.body)
+                                    .foregroundStyle(widgetAccent)
+                                    .frame(minWidth: 32, minHeight: 32)
+                            }
+                            .accessibilityLabel("Quick checkpoint for \(featuredGame.title)")
                         }
 
                         Text(featuredGame.title)

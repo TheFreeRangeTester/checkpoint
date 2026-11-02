@@ -4,6 +4,14 @@ enum CheckpointDeepLink {
     static let scheme = "checkpoint"
     static let libraryURL = URL(string: "\(scheme)://library")!
 
+    static func quickCheckpointURL(gameID: UUID? = nil, photo: Bool = false) -> URL {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = photo ? "capture" : "quick-checkpoint"
+        if let gameID { components.path = "/\(gameID.uuidString.lowercased())" }
+        return components.url ?? libraryURL
+    }
+
     static func gameURL(gameID: UUID) -> URL {
         var components = URLComponents()
         components.scheme = scheme
@@ -17,8 +25,33 @@ struct CheckpointWidgetSnapshot: Codable, Sendable {
     let refreshedAt: Date
     let featuredGame: FeaturedGame?
     let recentGames: [FeaturedGame]
+    let selectableGames: [CheckpointWidgetGame]?
 
-    static let empty = CheckpointWidgetSnapshot(refreshedAt: .now, featuredGame: nil, recentGames: [])
+    init(refreshedAt: Date, featuredGame: FeaturedGame?, recentGames: [FeaturedGame], selectableGames: [CheckpointWidgetGame]? = nil) {
+        self.refreshedAt = refreshedAt
+        self.featuredGame = featuredGame
+        self.recentGames = recentGames
+        self.selectableGames = selectableGames
+    }
+
+    // Older snapshots can still supply the games they already contain.
+    var availableQuickCheckpointGames: [CheckpointWidgetGame] {
+        selectableGames ?? recentGames.map { CheckpointWidgetGame(id: $0.id, title: $0.title) }
+    }
+
+    func quickCheckpointGame(selectedID: UUID?) -> CheckpointWidgetGame? {
+        if let selectedID {
+            return availableQuickCheckpointGames.first { $0.id == selectedID }
+        }
+        return featuredGame.map { CheckpointWidgetGame(id: $0.id, title: $0.title) }
+    }
+
+    static let empty = CheckpointWidgetSnapshot(refreshedAt: .now, featuredGame: nil, recentGames: [], selectableGames: [])
+}
+
+struct CheckpointWidgetGame: Codable, Sendable, Identifiable {
+    let id: UUID
+    let title: String
 }
 
 struct FeaturedGame: Codable, Sendable {
